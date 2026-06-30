@@ -141,9 +141,8 @@
       center: new kakao.maps.LatLng(37.5665, 126.978),
       level: 4,
     });
-    // 줌 컨트롤 + 지도/스카이뷰 전환 (카카오 기본 제공)
+    // 줌 컨트롤만 (스카이뷰 토글은 사용 안 함)
     state.map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-    state.map.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
 
     // 지도 빈 곳 클릭 → "여기에 북마크 추가" 핀 버튼
     kakao.maps.event.addListener(state.map, "click", (mouseEvent) => onMapClickAdd(mouseEvent.latLng));
@@ -250,32 +249,24 @@
     }
   }
 
-  // 지도 클릭 → 임시 핀 + "여기에 북마크 추가" 버튼
+  // 지도 클릭 → 임시 핀 + "여기에 북마크 추가" 버튼 (흰 말풍선 박스 없이 버튼만)
   function onMapClickAdd(latLng) {
     const lat = latLng.getLat(), lng = latLng.getLng();
     clearTempMarker();
     const el = document.createElement("div");
-    el.className = "kk-pin-wrap";
-    el.innerHTML = `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`;
+    el.className = "kk-add-wrap";
+    el.innerHTML =
+      `<button class="popup-add-btn" type="button">📍 여기에 북마크 추가</button>` +
+      `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`;
+    el.querySelector(".popup-add-btn").addEventListener("click", () => startAddAt(lat, lng));
     state.tempOverlay = new kakao.maps.CustomOverlay({
-      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 5,
+      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 6,
     });
     state.tempOverlay.setMap(state.map);
-    state.tempIw = new kakao.maps.InfoWindow({
-      position: latLng,
-      content: `<div style="padding:6px 8px"><button class="popup-add-btn">📍 여기에 북마크 추가</button></div>`,
-      removable: true,
-    });
-    state.tempIw.open(state.map);
-    setTimeout(() => {
-      const b = document.querySelector(".popup-add-btn");
-      if (b) b.onclick = () => startAddAt(lat, lng);
-    }, 0);
   }
 
   function clearTempMarker() {
     if (state.tempOverlay) { state.tempOverlay.setMap(null); state.tempOverlay = null; }
-    if (state.tempIw) { state.tempIw.close(); state.tempIw = null; }
   }
 
   // 지정 좌표로 새 북마크 추가 시작

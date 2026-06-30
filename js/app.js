@@ -1220,7 +1220,7 @@
     ctx.fillStyle = "#c5cad6";
     ctx.font = "24px -apple-system, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText("여기여기 · 장소 다이어리", W - padding, H - 40);
+    ctx.fillText("pindiary · 장소 다이어리", W - padding, H - 40);
     ctx.textAlign = "left";
 
     return canvas;
@@ -1238,7 +1238,7 @@
     openModal("export-sheet");
     const note = $("#export-folder-note");
     note.textContent = window.showDirectoryPicker
-      ? "저장 위치(폴더)를 직접 고를 수 있어요. 처음 한 번 고르면 '여기여기 내보내기' 폴더에 모읍니다."
+      ? "저장 위치(폴더)를 직접 고를 수 있어요. 처음 한 번 고르면 'pindiary 내보내기' 폴더에 모읍니다."
       : "이 브라우저는 폴더 지정을 지원하지 않아 다운로드 폴더에 저장됩니다.";
     renderExportPhotoPick(all);
     await refreshExportPreview();
@@ -1286,13 +1286,13 @@
       try {
         if (!state.exportDir) {
           const root = await window.showDirectoryPicker({ mode: "readwrite" });
-          state.exportDir = await root.getDirectoryHandle("여기여기 내보내기", { create: true });
+          state.exportDir = await root.getDirectoryHandle("pindiary 내보내기", { create: true });
         }
         const fh = await state.exportDir.getFileHandle(filename, { create: true });
         const w = await fh.createWritable();
         await w.write(blob);
         await w.close();
-        toast(`'여기여기 내보내기' 폴더에 저장했어요`);
+        toast(`'pindiary 내보내기' 폴더에 저장했어요`);
         return;
       } catch (e) {
         if (e && e.name === "AbortError") return; // 사용자가 취소

@@ -356,7 +356,7 @@
     box.innerHTML = "<li>검색 중…</li>";
     const ps = new kakao.maps.services.Places();
     const opts = {};
-    if (state.map) { opts.location = state.map.getCenter(); opts.radius = 20000; }
+    // 위치/반경 제한 없이 전국 검색 (먼 장소도 찾도록)
     ps.keywordSearch(query, (data, status) => {
       if (status === kakao.maps.services.Status.OK && data.length) {
         box.innerHTML = "";
@@ -749,8 +749,7 @@
     results.innerHTML = `<li>검색 중…</li>`;
     const ps = new kakao.maps.services.Places();
     const opts = {};
-    if (state.editorMap) { opts.location = state.editorMap.getCenter(); opts.radius = 20000; }
-    // 카카오 키워드 검색 — 한국 상호·주소에 강하고 띄어쓰기 차이도 잘 처리
+    // 위치/반경 제한 없이 전국 검색 (카카오 키워드 검색, 띄어쓰기 차이도 잘 처리)
     ps.keywordSearch(query, (data, status) => {
       if (status === kakao.maps.services.Status.OK) {
         results.innerHTML = "";

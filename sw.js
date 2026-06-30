@@ -1,5 +1,5 @@
 /* sw.js — 앱 셸 오프라인 캐시 (지도 타일은 네트워크 필요) */
-const CACHE = "yeogiyeogi-v4";
+const CACHE = "yeogiyeogi-v5";
 const ASSETS = [
   "./",
   "./index.html",

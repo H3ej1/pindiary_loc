@@ -1540,9 +1540,16 @@
     window.addEventListener("resize", fixMapSize);
     window.addEventListener("orientationchange", () => setTimeout(fixMapSize, 300));
 
-    // 서비스워커 등록 (PWA)
+    // 서비스워커 등록 (PWA) — 새 버전이 올라오면 자동 반영(캐시 묵힘 방지)
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      const hadController = !!navigator.serviceWorker.controller;
+      let refreshed = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshed || !hadController) return; // 첫 설치 땐 새로고침 안 함
+        refreshed = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register("sw.js").then((reg) => { reg.update(); }).catch(() => {});
     }
   }
 

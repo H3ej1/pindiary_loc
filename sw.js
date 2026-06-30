@@ -1,74 +1,23 @@
-/* sw.js — 앱 셸 오프라인 캐시 (지도 타일은 네트워크 필요) */
-const CACHE = "yeogiyeogi-v5";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./css/styles.css",
-  "./js/db.js",
-  "./js/app.js",
-  "./manifest.webmanifest",
-  "./assets/icon-192.png",
-  "./assets/icon-512.png",
-  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-];
+/* sw.js — 캐시 묵힘 영구 방지 버전.
+   더 이상 앱 파일을 캐시하지 않고, 항상 네트워크에서 최신을 받는다.
+   활성화 시 과거에 쌓인 캐시는 전부 제거한다. (PWA 설치성은 유지) */
+const SW_VERSION = "v6-nocache";
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) =>
-      // 일부 리소스 실패해도 설치는 진행
-      Promise.allSettled(ASSETS.map((u) => c.add(u)))
-    ).then(() => self.skipWaiting())
-  );
+self.addEventListener("install", () => {
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    (async () => {
+      // 예전 버전이 캐시해 둔 것 전부 삭제 → 옛 화면이 다시 뜨는 문제 제거
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })()
   );
 });
 
-self.addEventListener("fetch", (e) => {
-  const req = e.request;
-  if (req.method !== "GET") return;
-  const url = new URL(req.url);
-
-  // 카카오 지도/검색 리소스: 네트워크 우선 + 절대 캐시하지 않음 (운영정책 준수)
-  if (
-    url.hostname.includes("dapi.kakao.com") ||
-    url.hostname.includes("daumcdn.net") ||
-    url.hostname.includes("kakao.com")
-  ) {
-    return; // 브라우저 기본 처리 (저장/재배포 금지)
-  }
-
-  // 같은 출처(앱 파일 html/css/js): 네트워크 우선 → 항상 최신, 실패 시(오프라인) 캐시
-  if (url.origin === self.location.origin) {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-    return;
-  }
-
-  // 그 외(jsPDF 등 외부 CDN): 캐시 우선, 없으면 네트워크 후 캐시
-  e.respondWith(
-    caches.match(req).then(
-      (cached) =>
-        cached ||
-        fetch(req)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-            return res;
-          })
-          .catch(() => cached)
-    )
-  );
-});
+// fetch 핸들러는 두되 가로채지 않음 → 브라우저 기본(항상 네트워크) 처리.
+// (캐시를 안 하므로 옛 버전이 묵히지 않는다. 핸들러 존재로 PWA 설치 조건은 충족)
+self.addEventListener("fetch", () => {});

@@ -1369,7 +1369,7 @@
     const a = document.createElement("a");
     const d = new Date();
     a.href = url;
-    a.download = `yeogiyeogi-backup-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
+    a.download = `pindiary-backup-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast("백업 파일을 내보냈어요 📦");

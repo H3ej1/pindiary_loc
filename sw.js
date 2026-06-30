@@ -1,5 +1,5 @@
 /* sw.js — 앱 셸 오프라인 캐시 (지도 타일은 네트워크 필요) */
-const CACHE = "yeogiyeogi-v2";
+const CACHE = "yeogiyeogi-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,8 +9,6 @@ const ASSETS = [
   "./manifest.webmanifest",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
 ];
 
@@ -36,14 +34,13 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // 지도 타일·지오코딩 API: 네트워크 우선 (캐시하지 않음)
+  // 카카오 지도/검색 리소스: 네트워크 우선 + 절대 캐시하지 않음 (운영정책 준수)
   if (
-    url.hostname.includes("basemaps.cartocdn.com") ||
-    url.hostname.includes("tile.openstreetmap.org") ||
-    url.hostname.includes("photon.komoot.io") ||
-    url.hostname.includes("nominatim.openstreetmap.org")
+    url.hostname.includes("dapi.kakao.com") ||
+    url.hostname.includes("daumcdn.net") ||
+    url.hostname.includes("kakao.com")
   ) {
-    return; // 브라우저 기본 처리
+    return; // 브라우저 기본 처리 (저장/재배포 금지)
   }
 
   // 그 외: 캐시 우선, 없으면 네트워크 후 캐시

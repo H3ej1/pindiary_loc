@@ -399,12 +399,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   width: 8px; height: 8px; border-radius: 50%; background: #fff;
   transform: rotate(45deg);
 }
-/* 마커 위 장소 이름 라벨 */
-.leaflet-tooltip.place-label {
-  background: rgba(255, 255, 255, 0.92); border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 700; color: #2b2f3a;
+/* 카카오 커스텀 오버레이: 핀 + 장소 이름 라벨 (이름표는 핀 위에) */
+.kk-pin-wrap { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.kk-label {
+  order: -1; margin-bottom: 2px;
+  background: rgba(255, 255, 255, 0.92); box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 700; color: #2b2f3a; white-space: nowrap;
 }
-.leaflet-tooltip.place-label::before { display: none; }
 
 /* 추가 핀 (지도 클릭 시) */
 .cat-marker.add-pin { background: var(--accent); }

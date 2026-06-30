@@ -126,53 +126,34 @@
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
     if (name === "map") {
       renderList(); // 목록이 지도 뷰에 통합됨
-      if (state.map) setTimeout(() => state.map.invalidateSize(), 60);
+      if (state.map) setTimeout(() => state.map.relayout(), 60);
     }
     if (name === "folders") renderFoldersHome();
     if (name === "calendar") renderCalendar();
     if (name === "backup") renderBackupStat();
   }
 
-  // ---------- 지도 (메인) ----------
-  // 베이스맵 3종 (모두 키 불필요):
-  //  - 깔끔(기본): CARTO Positron — 회색 건물 표시 + 차분, 나무·빗금 없음
-  //  - 중간: CARTO Voyager — 색이 약간 있고 라벨 풍부
-  //  - 상세: OSM 표준 — 모든 건물·POI, 단 색이 진하고 복잡
-  function positronLayer() {
-    return L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
-      subdomains: "abcd", maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO',
-    });
-  }
-  function voyagerLayer() {
-    return L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", {
-      subdomains: "abcd", maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO',
-    });
-  }
-  function osmDetailLayer() {
-    return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      subdomains: "abc", maxZoom: 19, attribution: '&copy; OpenStreetMap',
-    });
-  }
-  // 에디터 지도도 깔끔한 Positron 사용
-  function baseTileLayer() { return positronLayer(); }
+  // ---------- 지도 (메인) — 카카오맵 ----------
+  // 카카오 level: 숫자가 작을수록 확대(가까움). 3~4 = 거리/건물 보이는 줌.
   function initMap() {
-    state.map = L.map("map", { zoomControl: true }).setView([37.5665, 126.978], 15); // 건물 보이는 줌
-    const positron = positronLayer().addTo(state.map); // 기본: 깔끔(건물 회색 표시)
-    L.control.layers(
-      { "깔끔 (기본)": positron, "중간": voyagerLayer(), "상세 (건물·POI 많음)": osmDetailLayer() },
-      {},
-      { position: "topright", collapsed: true }
-    ).addTo(state.map);
+    const container = document.getElementById("map");
+    state.map = new kakao.maps.Map(container, {
+      center: new kakao.maps.LatLng(37.5665, 126.978),
+      level: 4,
+    });
+    // 줌 컨트롤 + 지도/스카이뷰 전환 (카카오 기본 제공)
+    state.map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    state.map.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
 
     // 지도 빈 곳 클릭 → "여기에 북마크 추가" 핀 버튼
-    state.map.on("click", onMapClickAdd);
+    kakao.maps.event.addListener(state.map, "click", (mouseEvent) => onMapClickAdd(mouseEvent.latLng));
 
     // 현재 위치로 이동 시도
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (state.places.length === 0)
-            state.map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+            state.map.setCenter(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
         },
         () => {},
         { timeout: 5000 }
@@ -200,11 +181,17 @@
     return `<div class="popup-list">${header}${items}</div>`;
   }
 
+  function closeOpenIw() {
+    if (state.openIw) { state.openIw.close(); state.openIw = null; }
+  }
+
   function refreshMarkers() {
     if (!state.map) return;
-    state.markers.forEach((m) => state.map.removeLayer(m));
+    // 기존 오버레이/말풍선 제거
+    (state.overlays || []).forEach((o) => o.setMap(null));
+    state.overlays = [];
     state.markers.clear();
-    const bounds = [];
+    closeOpenIw();
 
     // 같은 위치 북마크 그룹핑
     const groups = new Map();
@@ -215,61 +202,80 @@
       groups.get(k).push(p);
     });
 
+    const bounds = new kakao.maps.LatLngBounds();
+    let any = false;
+
     groups.forEach((places) => {
       const lat = places[0].lat, lng = places[0].lng;
-      const marker = L.marker([lat, lng], { icon: markerIcon(places[0].category) }).addTo(state.map);
-      marker.bindPopup(groupPopupHtml(places), { maxWidth: 260, minWidth: 180 });
-      marker.on("popupopen", () => {
-        document.querySelectorAll(".popup-item").forEach((el) => {
-          el.onclick = () => openViewer(el.dataset.id);
-        });
-      });
-      marker.on("click", () => focusListItem(places[0].id));
-      // 지도 위 장소 이름 라벨 (앱처럼) — 여러 개면 +N
+      const pos = new kakao.maps.LatLng(lat, lng);
+
+      // 폴더색 핀 + 이름 라벨을 커스텀 오버레이로
+      const fc = folderById(places[0].category);
+      const color = fc ? fc.color : "#ff6b6b";
       const label = places.length > 1 ? `${places[0].name} +${places.length - 1}` : places[0].name;
-      marker.bindTooltip(escapeHtml(label), {
-        permanent: true, direction: "top", offset: [0, -26], className: "place-label",
+      const el = document.createElement("div");
+      el.className = "kk-pin-wrap";
+      el.innerHTML =
+        `<div class="kk-label">${escapeHtml(label)}</div>` +
+        `<div class="cat-marker" style="background:${color}"><span class="cat-marker-dot"></span></div>`;
+
+      const overlay = new kakao.maps.CustomOverlay({
+        position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3,
       });
-      // 그룹 내 모든 id가 같은 마커를 가리키도록(focus/이동용)
-      places.forEach((p) => state.markers.set(p.id, marker));
-      bounds.push([lat, lng]);
+      overlay.setMap(state.map);
+
+      // 그룹 말풍선(간략 목록) — 클릭 시 열림
+      const iw = new kakao.maps.InfoWindow({ position: pos, content: groupPopupHtml(places), removable: true });
+      el.addEventListener("click", () => {
+        closeOpenIw();
+        iw.open(state.map);
+        state.openIw = iw;
+        setTimeout(() => {
+          document.querySelectorAll(".popup-item").forEach((it) => {
+            it.onclick = () => openViewer(it.dataset.id);
+          });
+        }, 0);
+        focusListItem(places[0].id);
+      });
+
+      // 그룹 내 모든 id가 같은 오버레이/말풍선을 가리키도록(focus/이동용)
+      places.forEach((p) => state.markers.set(p.id, { overlay, iw, pos }));
+      bounds.extend(pos);
+      any = true;
     });
 
-    if (bounds.length && !state._fitted) {
-      state.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+    if (any && !state._fitted) {
+      state.map.setBounds(bounds);
       state._fitted = true;
     }
   }
 
   // 지도 클릭 → 임시 핀 + "여기에 북마크 추가" 버튼
-  function onMapClickAdd(e) {
-    const { lat, lng } = e.latlng;
-    if (state.tempMarker) state.map.removeLayer(state.tempMarker);
-    state.tempMarker = L.marker([lat, lng], { icon: addPinIcon() }).addTo(state.map);
-    state.tempMarker.bindPopup(
-      `<button class="popup-add-btn">📍 여기에 북마크 추가</button>`,
-      { closeButton: true }
-    );
-    // 핸들러를 먼저 등록한 뒤 열어야 popupopen이 잡힘
-    state.tempMarker.on("popupopen", () => {
+  function onMapClickAdd(latLng) {
+    const lat = latLng.getLat(), lng = latLng.getLng();
+    clearTempMarker();
+    const el = document.createElement("div");
+    el.className = "kk-pin-wrap";
+    el.innerHTML = `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`;
+    state.tempOverlay = new kakao.maps.CustomOverlay({
+      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 5,
+    });
+    state.tempOverlay.setMap(state.map);
+    state.tempIw = new kakao.maps.InfoWindow({
+      position: latLng,
+      content: `<div style="padding:6px 8px"><button class="popup-add-btn">📍 여기에 북마크 추가</button></div>`,
+      removable: true,
+    });
+    state.tempIw.open(state.map);
+    setTimeout(() => {
       const b = document.querySelector(".popup-add-btn");
       if (b) b.onclick = () => startAddAt(lat, lng);
-    });
-    // 추가하지 않고 말풍선을 닫으면 임시 핀 제거
-    state.tempMarker.on("popupclose", () => setTimeout(clearTempMarker, 50));
-    state.tempMarker.openPopup();
-  }
-
-  function addPinIcon() {
-    return L.divIcon({
-      className: "cat-marker-wrap",
-      html: `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`,
-      iconSize: [30, 30], iconAnchor: [15, 29], popupAnchor: [0, -28],
-    });
+    }, 0);
   }
 
   function clearTempMarker() {
-    if (state.tempMarker) { state.map.removeLayer(state.tempMarker); state.tempMarker = null; }
+    if (state.tempOverlay) { state.tempOverlay.setMap(null); state.tempOverlay = null; }
+    if (state.tempIw) { state.tempIw.close(); state.tempIw = null; }
   }
 
   // 지정 좌표로 새 북마크 추가 시작
@@ -279,19 +285,6 @@
     state.draft.lat = lat;
     state.draft.lng = lng;
     reverseGeocode(lat, lng);
-  }
-
-  // 폴더 색이 들어간 지도 마커 (카카오맵처럼 깔끔한 컬러 핀)
-  function markerIcon(catId) {
-    const c = folderById(catId);
-    const color = c ? c.color : "#ff6b6b";
-    return L.divIcon({
-      className: "cat-marker-wrap",
-      html: `<div class="cat-marker" style="background:${color}"><span class="cat-marker-dot"></span></div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 27],
-      popupAnchor: [0, -28],
-    });
   }
 
   // ---------- 목록 ----------
@@ -438,11 +431,20 @@
     if (!p || p.lat == null) { toast("위치 정보가 없어요"); return; }
     switchView("map");
     setTimeout(() => {
-      state.map.setView([p.lat, p.lng], 17);
+      if (!state.map) return;
+      state.map.setLevel(3);
+      state.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng));
       const mk = state.markers.get(id);
-      if (mk) mk.openPopup();
+      if (mk) {
+        closeOpenIw();
+        mk.iw.open(state.map);
+        state.openIw = mk.iw;
+        setTimeout(() => {
+          document.querySelectorAll(".popup-item").forEach((it) => { it.onclick = () => openViewer(it.dataset.id); });
+        }, 0);
+      }
       focusListItem(id);
-    }, 140);
+    }, 160);
   }
 
   // 목록/달력에서 바로 삭제
@@ -611,20 +613,22 @@
 
   function initEditorMap() {
     const d = state.draft;
-    const center = d.lat != null ? [d.lat, d.lng] : [37.5665, 126.978];
+    const center = d.lat != null ? new kakao.maps.LatLng(d.lat, d.lng) : new kakao.maps.LatLng(37.5665, 126.978);
+    const container = document.getElementById("editor-map");
     if (!state.editorMap) {
-      state.editorMap = L.map("editor-map").setView(center, d.lat != null ? 16 : 12);
-      baseTileLayer().addTo(state.editorMap);
-      state.editorMap.on("click", (e) => {
-        setEditorPin(e.latlng.lat, e.latlng.lng, true);
+      state.editorMap = new kakao.maps.Map(container, { center, level: d.lat != null ? 3 : 7 });
+      state.editorMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+      kakao.maps.event.addListener(state.editorMap, "click", (me) => {
+        setEditorPin(me.latLng.getLat(), me.latLng.getLng(), true);
       });
     } else {
-      state.editorMap.setView(center, d.lat != null ? 16 : 12);
+      state.editorMap.setCenter(center);
+      state.editorMap.setLevel(d.lat != null ? 3 : 7);
     }
-    setTimeout(() => state.editorMap.invalidateSize(), 50);
+    setTimeout(() => state.editorMap.relayout(), 60);
     if (d.lat != null) setEditorPin(d.lat, d.lng, false);
     else if (state.editorMarker) {
-      state.editorMap.removeLayer(state.editorMarker);
+      state.editorMarker.setMap(null);
       state.editorMarker = null;
     }
   }
@@ -632,119 +636,76 @@
   function setEditorPin(lat, lng, reverse) {
     state.draft.lat = lat;
     state.draft.lng = lng;
-    if (state.editorMarker) state.editorMarker.setLatLng([lat, lng]);
-    else state.editorMarker = L.marker([lat, lng]).addTo(state.editorMap);
-    state.editorMap.panTo([lat, lng]);
+    const pos = new kakao.maps.LatLng(lat, lng);
+    if (state.editorMarker) state.editorMarker.setPosition(pos);
+    else state.editorMarker = new kakao.maps.Marker({ position: pos, map: state.editorMap });
+    state.editorMap.panTo(pos);
     if (reverse) reverseGeocode(lat, lng);
   }
 
   // ---------- 지오코딩 (Nominatim, 무료) ----------
-  async function searchPlace(query) {
+  function searchPlace(query) {
     const results = $("#search-results");
     // 먼저 링크 붙여넣기 좌표 추출 시도
     const coords = extractCoords(query);
     if (coords) {
       results.innerHTML = "";
       setEditorPin(coords.lat, coords.lng, true);
-      state.editorMap.setView([coords.lat, coords.lng], 16);
+      if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(coords.lat, coords.lng)); state.editorMap.setLevel(3); }
       toast("링크에서 좌표를 찾았어요");
       return;
     }
-    results.innerHTML = `<li>검색 중…</li>`;
-    try {
-      const c = state.editorMap ? state.editorMap.getCenter() : { lat: 36.5, lng: 127.8 };
-      const strip = (s) => (s || "").replace(/\s+/g, "").toLowerCase();
-      const qStrip = strip(query);
-      const words = query.trim().split(/\s+/).filter(Boolean);
-
-      // 띄어쓰기 차이 등에 강하도록 여러 변형으로 동시 검색 후 병합
-      const variants = new Set();
-      variants.add(query);                         // 원본
-      variants.add(query.replace(/\s+/g, ""));     // 공백 제거
-      if (words.length >= 2) variants.add(words.slice(0, 2).join(" ")); // 앞 두 단어
-      if (words.length >= 1) variants.add(words[0]);                    // 첫 단어(넓게)
-
-      const reqs = Array.from(variants).slice(0, 4).map((v) =>
-        fetch(`https://photon.komoot.io/api/?lang=default&limit=10&lat=${c.lat}&lon=${c.lng}&q=` + encodeURIComponent(v))
-          .then((r) => r.json()).catch(() => ({ features: [] }))
-      );
-      const datas = await Promise.all(reqs);
-
-      // 좌표 기준 중복 제거
-      const seen = new Set();
-      let feats = [];
-      datas.forEach((d) => (d.features || []).forEach((f) => {
-        const k = f.geometry.coordinates.join(",");
-        if (!seen.has(k)) { seen.add(k); feats.push(f); }
-      }));
-
-      // 공백 무시 매칭 점수로 정렬 (이름이 검색어를 포함하면 상위로)
-      const score = (f) => {
-        const nm = strip(f.properties && f.properties.name);
-        if (!nm || !qStrip) return 0;
-        if (nm === qStrip) return 3;
-        if (nm.includes(qStrip) || qStrip.includes(nm)) return 2;
-        // 단어 단위 부분 일치
-        if (words.some((w) => nm.includes(strip(w)))) return 1;
-        return 0;
-      };
-      feats.sort((a, b) => score(b) - score(a));
-      feats = feats.slice(0, 8);
-
-      if (!feats.length) {
-        results.innerHTML = `<li>검색 결과가 없어요. 지도를 직접 눌러 위치를 찍어보세요.</li>`;
-        return;
-      }
-      results.innerHTML = "";
-      feats.forEach((f) => {
-        const pr = f.properties || {};
-        const lng = f.geometry.coordinates[0];
-        const lat = f.geometry.coordinates[1];
-        const name = pr.name || photonAddress(pr).split(",")[0] || "이름 미상";
-        const addr = photonAddress(pr);
-        const li = document.createElement("li");
-        li.innerHTML = `<div class="r-name">${escapeHtml(name)}</div><div class="r-addr">${escapeHtml(addr)}</div>`;
-        li.addEventListener("click", () => {
-          if (!$("#place-name").value) $("#place-name").value = name;
-          $("#place-address").value = addr;
-          state.draft.name = $("#place-name").value;
-          state.draft.address = addr;
-          setEditorPin(lat, lng, false);
-          state.editorMap.setView([lat, lng], 16);
-          results.innerHTML = "";
-        });
-        results.appendChild(li);
-      });
-    } catch (e) {
-      results.innerHTML = `<li>검색 실패 (네트워크 확인). 지도를 직접 눌러도 됩니다.</li>`;
+    if (!(window.kakao && kakao.maps && kakao.maps.services)) {
+      results.innerHTML = `<li>검색 모듈 로드 실패 (인터넷 확인)</li>`;
+      return;
     }
-  }
-
-  // Photon 속성 → 읽기 좋은 한국식 주소 문자열
-  function photonAddress(pr) {
-    const parts = [];
-    const country = pr.country;
-    if (pr.state) parts.push(pr.state);
-    if (pr.city && pr.city !== pr.state) parts.push(pr.city);
-    if (pr.district) parts.push(pr.district);
-    if (pr.street) parts.push(pr.housenumber ? `${pr.street} ${pr.housenumber}` : pr.street);
-    if (!parts.length && pr.name) parts.push(pr.name);
-    if (country) parts.unshift(country);
-    return parts.reverse().join(", ");
-  }
-
-  async function reverseGeocode(lat, lng) {
-    try {
-      const url = `https://photon.komoot.io/reverse?lang=default&lat=${lat}&lon=${lng}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      const data = await res.json();
-      const pr = data && data.features && data.features[0] && data.features[0].properties;
-      if (pr && !$("#place-address").value) {
-        const addr = photonAddress(pr);
-        $("#place-address").value = addr;
-        state.draft.address = addr;
+    results.innerHTML = `<li>검색 중…</li>`;
+    const ps = new kakao.maps.services.Places();
+    const opts = {};
+    if (state.editorMap) { opts.location = state.editorMap.getCenter(); opts.radius = 20000; }
+    // 카카오 키워드 검색 — 한국 상호·주소에 강하고 띄어쓰기 차이도 잘 처리
+    ps.keywordSearch(query, (data, status) => {
+      if (status === kakao.maps.services.Status.OK) {
+        results.innerHTML = "";
+        data.slice(0, 12).forEach((place) => {
+          const lat = parseFloat(place.y), lng = parseFloat(place.x);
+          const name = place.place_name || "이름 미상";
+          const addr = place.road_address_name || place.address_name || "";
+          const li = document.createElement("li");
+          li.innerHTML = `<div class="r-name">${escapeHtml(name)}</div><div class="r-addr">${escapeHtml(addr)}</div>`;
+          li.addEventListener("click", () => {
+            if (!$("#place-name").value) $("#place-name").value = name;
+            $("#place-address").value = addr;
+            state.draft.name = $("#place-name").value;
+            state.draft.address = addr;
+            setEditorPin(lat, lng, false);
+            if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(lat, lng)); state.editorMap.setLevel(3); }
+            results.innerHTML = "";
+          });
+          results.appendChild(li);
+        });
+      } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+        results.innerHTML = `<li>검색 결과가 없어요. 지도를 직접 눌러 위치를 찍어보세요.</li>`;
+      } else {
+        results.innerHTML = `<li>검색 실패 (네트워크 확인). 지도를 직접 눌러도 됩니다.</li>`;
       }
-    } catch (e) { /* 무시 */ }
+    }, opts);
+  }
+
+  function reverseGeocode(lat, lng) {
+    if (!(window.kakao && kakao.maps && kakao.maps.services)) return;
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.coord2Address(lng, lat, (result, status) => {
+      if (status === kakao.maps.services.Status.OK && result[0]) {
+        const r = result[0];
+        const addr = (r.road_address && r.road_address.address_name) ||
+                     (r.address && r.address.address_name) || "";
+        if (addr && !$("#place-address").value) {
+          $("#place-address").value = addr;
+          if (state.draft) state.draft.address = addr;
+        }
+      }
+    });
   }
 
   // ---------- 폴더/별점/기분/사진 위젯 ----------
@@ -1408,7 +1369,7 @@
       if (coords) {
         setTimeout(() => {
           setEditorPin(coords.lat, coords.lng, true);
-          if (state.editorMap) state.editorMap.setView([coords.lat, coords.lng], 16);
+          if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(coords.lat, coords.lng)); state.editorMap.setLevel(3); }
           toast("링크에서 좌표를 찾았어요");
         }, 0);
       }
@@ -1497,7 +1458,6 @@
   // ---------- 시작 ----------
   async function init() {
     bindEvents();
-    initMap();
     try {
       await loadFolders();
       state.places = await PlaceDB.getAll();
@@ -1509,9 +1469,16 @@
       toast("저장소를 여는 데 실패했어요");
       state.places = [];
     }
-    refreshMarkers();
     renderList(); // 지도 뷰에 통합된 목록 초기 렌더
     renderBackupStat();
+
+    // 카카오맵 로드 후 지도/마커 초기화 (autoload=false 사용)
+    if (window.kakao && kakao.maps && kakao.maps.load) {
+      kakao.maps.load(() => {
+        initMap();
+        refreshMarkers();
+      });
+    }
 
     // 서비스워커 등록 (PWA)
     if ("serviceWorker" in navigator) {

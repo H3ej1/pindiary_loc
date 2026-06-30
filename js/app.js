@@ -126,7 +126,7 @@
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
     if (name === "map") {
       renderList(); // 목록이 지도 뷰에 통합됨
-      if (state.map) setTimeout(() => state.map.relayout(), 60);
+      if (state.map) setTimeout(fixMapSize, 60);
     }
     if (name === "folders") renderFoldersHome();
     if (name === "calendar") renderCalendar();
@@ -158,6 +158,14 @@
         { timeout: 5000 }
       );
     }
+  }
+
+  // 모바일 등에서 컨테이너 크기 확정이 늦어 지도가 빈칸으로 뜨는 것 방지 (relayout)
+  function fixMapSize() {
+    if (!state.map) return;
+    const c = state.map.getCenter();
+    state.map.relayout();
+    state.map.setCenter(c);
   }
 
   // 같은 위치(≈1m) 북마크 묶기용 키
@@ -1468,8 +1476,12 @@
       kakao.maps.load(() => {
         initMap();
         refreshMarkers();
+        // 모바일: 레이아웃 확정이 늦어 지도가 빈칸으로 뜨는 것 방지 (여러 번 relayout)
+        [150, 500, 1200].forEach((t) => setTimeout(fixMapSize, t));
       });
     }
+    window.addEventListener("resize", fixMapSize);
+    window.addEventListener("orientationchange", () => setTimeout(fixMapSize, 300));
 
     // 서비스워커 등록 (PWA)
     if ("serviceWorker" in navigator) {

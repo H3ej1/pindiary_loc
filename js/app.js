@@ -1510,7 +1510,15 @@
         setTimeout(() => { const md = document.getElementById("map"); dbg("1.2초후 지도칸=" + md.offsetWidth + "x" + md.offsetHeight); }, 1300);
       });
     } else {
-      dbg("카카오 SDK 미로딩 — 지도 초기화 건너뜀 (SDK 스크립트 로드 실패 가능)");
+      dbg("카카오 SDK 미로딩 — 원인 추적 중...");
+      dbg("UA: " + navigator.userAgent);
+      dbg("referrer: " + (document.referrer || "(없음)"));
+      // SDK 재로드 테스트: onload=서버응답 옴(도메인/인증 문제), onerror=요청 자체 실패(차단/네트워크)
+      var s = document.createElement("script");
+      s.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&autoload=false";
+      s.onload = function () { dbg("SDK 재시도 onload(응답 옴). kakao정의=" + (typeof kakao !== "undefined") + " → 응답이 오류JSON이면 도메인/인증 문제"); };
+      s.onerror = function () { dbg("SDK 재시도 onerror → 요청 자체 실패(브라우저 차단/네트워크/광고차단)"); };
+      document.head.appendChild(s);
     }
     window.addEventListener("resize", fixMapSize);
     window.addEventListener("orientationchange", () => setTimeout(fixMapSize, 300));

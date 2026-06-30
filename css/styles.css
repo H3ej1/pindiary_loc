@@ -442,7 +442,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .kk-add-wrap .popup-add-btn { margin-bottom: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.28); white-space: nowrap; }
 
 /* 말풍선 내 북마크 목록 (간략·스크롤) */
-.popup-list { max-height: 240px; overflow-y: auto; padding-right: 2px; }
+.popup-list { max-height: 240px; overflow-y: auto; padding-right: 2px; -webkit-overflow-scrolling: touch; }
 
 /* 핀 위에 뜨는 커스텀 말풍선 박스 (핀에 안 가리게 + 박스 안 스크롤) */
 .map-popup-wrap { padding-bottom: 42px; }
@@ -468,7 +468,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .popup-item .pp-stars { color: var(--gold); }
 .popup-item .pp-memo {
   font-size: 12px; color: #4a4f5e; margin-top: 3px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  white-space: pre-wrap; word-break: break-word; line-height: 1.5;
 }
 
 /* 폴더 관리 모달 */

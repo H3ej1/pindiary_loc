@@ -211,6 +211,8 @@
     });
     popup.setMap(state.map);
     state.openPopup = popup;
+    // 박스 안에서 스크롤할 때 지도가 같이 움직이지 않도록 (모바일)
+    wrap.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
     wrap.querySelector(".map-popup-close").addEventListener("click", () => closeOpenPopup());
     wrap.querySelectorAll(".popup-item").forEach((it) => {
       it.addEventListener("click", () => openViewer(it.dataset.id));

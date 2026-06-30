@@ -196,6 +196,7 @@
 
   function closeOpenPopup() {
     if (state.openPopup) { state.openPopup.setMap(null); state.openPopup = null; }
+    if (state.map && state.map.setZoomable) state.map.setZoomable(true); // 지도 줌 복구
   }
 
   // 그룹 말풍선: 핀 위에 떠서 핀에 안 가림 + 흰 박스 안에서 스크롤 (커스텀 오버레이)
@@ -213,6 +214,9 @@
     state.openPopup = popup;
     // 박스 안에서 스크롤할 때 지도가 같이 움직이지 않도록 (모바일)
     wrap.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
+    // 데스크톱: 커서가 말풍선 위면 휠로 박스 스크롤(지도 줌 끔), 벗어나면 지도 줌 복구
+    wrap.addEventListener("mouseenter", () => { if (state.map.setZoomable) state.map.setZoomable(false); });
+    wrap.addEventListener("mouseleave", () => { if (state.map.setZoomable) state.map.setZoomable(true); });
     wrap.querySelector(".map-popup-close").addEventListener("click", () => closeOpenPopup());
     wrap.querySelectorAll(".popup-item").forEach((it) => {
       it.addEventListener("click", () => openViewer(it.dataset.id));

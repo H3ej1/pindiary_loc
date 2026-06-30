@@ -309,12 +309,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: var(--surface);
   width: 100%; max-width: 560px;
   max-height: 92vh;
+  max-height: 88dvh; /* 모바일 주소창 높이 반영 → X 버튼이 주소창에 안 가림 */
   border-radius: 20px 20px 0 0;
   display: flex; flex-direction: column;
   animation: slideUp 0.22s ease;
 }
 @media (min-width: 600px) { .modal-sheet { border-radius: 20px; } }
-.modal-sheet.bottom { max-height: 60vh; }
+.modal-sheet.bottom { max-height: 60vh; max-height: 60dvh; }
 @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;

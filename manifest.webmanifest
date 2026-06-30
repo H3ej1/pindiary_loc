@@ -1,0 +1,26 @@
+{
+  "name": "여기여기 · 장소 다이어리",
+  "short_name": "여기여기",
+  "description": "내가 다녀온 장소를 사진·메모·별점과 함께 기록하는 개인 장소 다이어리",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f7fb",
+  "theme_color": "#ff6b6b",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# 운영/임시 파일은 사이트에 올리지 않음
+.omc/
+sandbox/
+prototype/
+dist/
+*.zip
+phoneapp.txt
+project-plan-template.md
+프로젝트-진행상황.md
+github-내일할일.txt
+.Rhistory
+.claude/

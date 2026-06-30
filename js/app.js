@@ -227,7 +227,7 @@
         `<div class="cat-marker" style="background:${color}"><span class="cat-marker-dot"></span></div>`;
 
       const overlay = new kakao.maps.CustomOverlay({
-        position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3,
+        position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3, clickable: true,
       });
       overlay.setMap(state.map);
 
@@ -268,7 +268,7 @@
       `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`;
     el.querySelector(".popup-add-btn").addEventListener("click", () => startAddAt(lat, lng));
     state.tempOverlay = new kakao.maps.CustomOverlay({
-      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 6,
+      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 6, clickable: true,
     });
     state.tempOverlay.setMap(state.map);
   }
@@ -284,6 +284,52 @@
     state.draft.lat = lat;
     state.draft.lng = lng;
     reverseGeocode(lat, lng);
+  }
+
+  // 검색 결과(이름·주소·좌표)로 바로 북마크 추가 시작
+  function startAddAtPlace(name, addr, lat, lng) {
+    clearTempMarker();
+    if (state.map) { state.map.setCenter(new kakao.maps.LatLng(lat, lng)); state.map.setLevel(3); }
+    openEditor(null);
+    state.draft.lat = lat;
+    state.draft.lng = lng;
+    state.draft.name = name;
+    state.draft.address = addr;
+    $("#place-name").value = name;
+    $("#place-address").value = addr;
+  }
+
+  // 지도 탭 검색창: 장소 검색 → 결과 클릭 시 바로 추가
+  function mapSearch(query) {
+    const box = $("#map-search-results");
+    if (!box) return;
+    if (!(window.kakao && kakao.maps && kakao.maps.services)) { box.innerHTML = "<li>검색 모듈 로드 실패</li>"; return; }
+    box.innerHTML = "<li>검색 중…</li>";
+    const ps = new kakao.maps.services.Places();
+    const opts = {};
+    if (state.map) { opts.location = state.map.getCenter(); opts.radius = 20000; }
+    ps.keywordSearch(query, (data, status) => {
+      if (status === kakao.maps.services.Status.OK && data.length) {
+        box.innerHTML = "";
+        data.slice(0, 12).forEach((place) => {
+          const lat = parseFloat(place.y), lng = parseFloat(place.x);
+          const name = place.place_name || "이름 미상";
+          const addr = place.road_address_name || place.address_name || "";
+          const li = document.createElement("li");
+          li.innerHTML = `<div class="r-name">${escapeHtml(name)}</div><div class="r-addr">${escapeHtml(addr)}</div>`;
+          li.addEventListener("click", () => {
+            box.innerHTML = "";
+            $("#map-search-input").value = "";
+            startAddAtPlace(name, addr, lat, lng);
+          });
+          box.appendChild(li);
+        });
+      } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+        box.innerHTML = "<li>검색 결과가 없어요.</li>";
+      } else {
+        box.innerHTML = "<li>검색 실패 (네트워크 확인).</li>";
+      }
+    }, opts);
   }
 
   // ---------- 목록 ----------
@@ -1416,6 +1462,17 @@
 
     // 폴더 관리 모달 닫기
     $("#folder-manager-close").addEventListener("click", () => closeModal("folder-manager"));
+
+    // 지도 탭 장소 검색창
+    const mapSearchInput = $("#map-search-input");
+    if (mapSearchInput) {
+      mapSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); const q = e.target.value.trim(); if (q) mapSearch(q); }
+      });
+      mapSearchInput.addEventListener("input", (e) => {
+        if (!e.target.value.trim()) $("#map-search-results").innerHTML = "";
+      });
+    }
 
     // 목록
     $("#list-search").addEventListener("input", renderList);

@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-192.png" />
 
-  <link rel="stylesheet" href="css/styles.css?v=8" />
+  <link rel="stylesheet" href="css/styles.css?v=9" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
@@ -29,6 +29,10 @@
       <div class="map-list-wrap">
         <div class="map-pane">
           <div id="map"></div>
+          <div class="map-search">
+            <input id="map-search-input" type="search" placeholder="🔍 장소 검색 (가게·주소) → 선택해 바로 추가" autocomplete="off" />
+            <ul id="map-search-results" class="map-search-results"></ul>
+          </div>
         </div>
         <div class="list-pane">
           <button id="list-search-toggle" class="list-search-toggle" aria-label="검색·정렬">🔍 검색·정렬</button>
@@ -262,7 +266,7 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&libraries=services&autoload=false"></script>
   <!-- jsPDF (PDF 내보내기) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="js/db.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/db.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>

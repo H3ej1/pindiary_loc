@@ -449,9 +449,9 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .map-popup {
   position: relative; width: 232px; background: #fff;
   border-radius: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
-  padding: 24px 12px 12px; max-height: 300px; overflow: hidden;
+  padding: 24px 12px 12px; max-height: 200px; overflow: hidden;
 }
-.map-popup .popup-list { max-height: 264px; }
+.map-popup .popup-list { max-height: 164px; }
 .map-popup-close {
   position: absolute; top: 6px; right: 8px; border: none; background: none;
   font-size: 15px; line-height: 1; color: #aaa; cursor: pointer; padding: 2px; z-index: 2;

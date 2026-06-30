@@ -45,7 +45,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand-mark { font-size: 22px; }
+.brand-mark { font-size: 22px; width: 26px; height: 26px; border-radius: 7px; display: block; }
 .brand h1 { font-size: 19px; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
 .btn-add {
   border: none;
@@ -117,6 +117,11 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .map-search-results li:active { background: #f0f3fb; }
 .map-search-results .r-name { font-weight: 700; font-size: 14px; }
 .map-search-results .r-addr { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.map-hint {
+  margin-top: 6px; display: inline-block; font-size: 11px; color: #444; line-height: 1.3;
+  background: rgba(255, 255, 255, 0.9); border-radius: 8px; padding: 5px 9px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.15);
+}
 
 /* ===== 목록 ===== */
 .list-toolbar {
@@ -438,6 +443,19 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 
 /* 말풍선 내 북마크 목록 (간략·스크롤) */
 .popup-list { max-height: 240px; overflow-y: auto; padding-right: 2px; }
+
+/* 핀 위에 뜨는 커스텀 말풍선 박스 (핀에 안 가리게 + 박스 안 스크롤) */
+.map-popup-wrap { padding-bottom: 42px; }
+.map-popup {
+  position: relative; width: 232px; background: #fff;
+  border-radius: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
+  padding: 24px 12px 12px; max-height: 300px; overflow: hidden;
+}
+.map-popup .popup-list { max-height: 264px; }
+.map-popup-close {
+  position: absolute; top: 6px; right: 8px; border: none; background: none;
+  font-size: 15px; line-height: 1; color: #aaa; cursor: pointer; padding: 2px; z-index: 2;
+}
 .popup-head { font-size: 12px; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
 .popup-item {
   padding: 7px 6px; border-radius: 8px; cursor: pointer; border-bottom: 1px solid var(--line);

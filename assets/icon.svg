@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff8f8f"/>
+      <stop offset="1" stop-color="#ff5c7a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- 펼친 책 -->
+  <g>
+    <path d="M256 312 C 206 292 150 290 104 304 L 104 404 C 150 390 206 392 256 410 Z" fill="#ffffff"/>
+    <path d="M256 312 C 306 292 362 290 408 304 L 408 404 C 362 390 306 392 256 410 Z" fill="#ffffff"/>
+    <path d="M256 312 L 256 410" stroke="#ffc9d2" stroke-width="6" stroke-linecap="round"/>
+    <path d="M134 326 C 168 318 210 320 238 332" stroke="#ffd6dd" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M378 326 C 344 318 302 320 274 332" stroke="#ffd6dd" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- 책 위에 떠 있는 위치 핀 -->
+  <g>
+    <ellipse cx="256" cy="300" rx="34" ry="9" fill="#000000" opacity="0.12"/>
+    <path d="M256 96 C 210 96 176 130 176 174 C 176 226 256 286 256 286 C 256 286 336 226 336 174 C 336 130 302 96 256 96 Z" fill="#ffffff"/>
+    <circle cx="256" cy="172" r="30" fill="#ff5c7a"/>
+  </g>
+</svg>

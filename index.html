@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#ff6b6b" />
   <meta name="description" content="내가 다녀온 장소를 사진·메모·별점과 함께 기록하는 개인 장소 다이어리" />
-  <title>여기여기 · 장소 다이어리</title>
+  <title>pindiary · 장소 다이어리</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png?v=11" />
 
-  <link rel="stylesheet" href="css/styles.css?v=10" />
+  <link rel="stylesheet" href="css/styles.css?v=11" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
   <header class="app-header">
     <div class="brand">
-      <span class="brand-mark">📍</span>
-      <h1>여기여기</h1>
+      <img class="brand-mark" src="assets/icon.svg?v=11" alt="" width="26" height="26" />
+      <h1>pindiary</h1>
     </div>
     <button id="btn-add" class="btn-add" aria-label="장소 추가">＋ 장소</button>
   </header>
@@ -32,6 +32,7 @@
           <div class="map-search">
             <input id="map-search-input" type="search" placeholder="🔍 장소 검색 (가게·주소) → 선택해 바로 추가" autocomplete="off" />
             <ul id="map-search-results" class="map-search-results"></ul>
+            <div class="map-hint">💡 지도를 꾹 누르거나(폰)·우클릭(PC)하면 그 위치에 추가</div>
           </div>
         </div>
         <div class="list-pane">
@@ -266,7 +267,7 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&libraries=services&autoload=false"></script>
   <!-- jsPDF (PDF 내보내기) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="js/db.js?v=10"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/db.js?v=11"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>

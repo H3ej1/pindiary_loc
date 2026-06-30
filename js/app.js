@@ -144,8 +144,14 @@
     // 줌 컨트롤만 (스카이뷰 토글은 사용 안 함)
     state.map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
-    // 지도 빈 곳 클릭 → "여기에 북마크 추가" 핀 버튼
-    kakao.maps.event.addListener(state.map, "click", (mouseEvent) => onMapClickAdd(mouseEvent.latLng));
+    // 좌클릭/탭 → 열린 추가핀·말풍선 닫기 / 우클릭(PC)·길게누르기(폰) → 추가 핀 표시
+    kakao.maps.event.addListener(state.map, "click", () => {
+      if (state._suppressClick) return;
+      clearTempMarker();
+      closeOpenPopup();
+    });
+    kakao.maps.event.addListener(state.map, "rightclick", (mouseEvent) => onMapClickAdd(mouseEvent.latLng));
+    setupLongPressAdd();
 
     // 현재 위치로 이동 시도
     if (navigator.geolocation) {
@@ -188,8 +194,28 @@
     return `<div class="popup-list">${header}${items}</div>`;
   }
 
-  function closeOpenIw() {
-    if (state.openIw) { state.openIw.close(); state.openIw = null; }
+  function closeOpenPopup() {
+    if (state.openPopup) { state.openPopup.setMap(null); state.openPopup = null; }
+  }
+
+  // 그룹 말풍선: 핀 위에 떠서 핀에 안 가림 + 흰 박스 안에서 스크롤 (커스텀 오버레이)
+  function openGroupPopup(places, pos) {
+    closeOpenPopup();
+    const wrap = document.createElement("div");
+    wrap.className = "map-popup-wrap";
+    wrap.innerHTML =
+      `<div class="map-popup"><button class="map-popup-close" type="button" aria-label="닫기">✕</button>` +
+      groupPopupHtml(places) + `</div>`;
+    const popup = new kakao.maps.CustomOverlay({
+      position: pos, content: wrap, xAnchor: 0.5, yAnchor: 1, zIndex: 1000, clickable: true,
+    });
+    popup.setMap(state.map);
+    state.openPopup = popup;
+    wrap.querySelector(".map-popup-close").addEventListener("click", () => closeOpenPopup());
+    wrap.querySelectorAll(".popup-item").forEach((it) => {
+      it.addEventListener("click", () => openViewer(it.dataset.id));
+    });
+    focusListItem(places[0].id);
   }
 
   function refreshMarkers() {
@@ -198,7 +224,7 @@
     (state.overlays || []).forEach((o) => o.setMap(null));
     state.overlays = [];
     state.markers.clear();
-    closeOpenIw();
+    closeOpenPopup();
 
     // 같은 위치 북마크 그룹핑
     const groups = new Map();
@@ -230,23 +256,10 @@
         position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3, clickable: true,
       });
       overlay.setMap(state.map);
+      el.addEventListener("click", () => openGroupPopup(places, pos));
 
-      // 그룹 말풍선(간략 목록) — 클릭 시 열림
-      const iw = new kakao.maps.InfoWindow({ position: pos, content: groupPopupHtml(places), removable: true });
-      el.addEventListener("click", () => {
-        closeOpenIw();
-        iw.open(state.map);
-        state.openIw = iw;
-        setTimeout(() => {
-          document.querySelectorAll(".popup-item").forEach((it) => {
-            it.onclick = () => openViewer(it.dataset.id);
-          });
-        }, 0);
-        focusListItem(places[0].id);
-      });
-
-      // 그룹 내 모든 id가 같은 오버레이/말풍선을 가리키도록(focus/이동용)
-      places.forEach((p) => state.markers.set(p.id, { overlay, iw, pos }));
+      // 그룹 내 모든 id가 같은 위치/목록을 가리키도록(focus/이동용)
+      places.forEach((p) => state.markers.set(p.id, { overlay, pos, places }));
       bounds.extend(pos);
       any = true;
     });
@@ -275,6 +288,42 @@
 
   function clearTempMarker() {
     if (state.tempOverlay) { state.tempOverlay.setMap(null); state.tempOverlay = null; }
+  }
+
+  // 모바일: 지도를 길게 누르면 그 위치에 "추가" 핀 표시 (PC 우클릭과 동일 효과)
+  function setupLongPressAdd() {
+    const container = document.getElementById("map");
+    if (!container) return;
+    container.addEventListener("contextmenu", (e) => e.preventDefault());
+    let timer = null, start = null;
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    container.addEventListener("touchstart", (e) => {
+      if (!e.touches || e.touches.length !== 1) { cancel(); return; }
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY };
+      cancel();
+      timer = setTimeout(() => {
+        timer = null;
+        if (!state.map) return;
+        try {
+          const rect = container.getBoundingClientRect();
+          const proj = state.map.getProjection();
+          const pt = new kakao.maps.Point(start.x - rect.left, start.y - rect.top);
+          const latLng = proj.coordsFromContainerPoint(pt);
+          state._suppressClick = true;
+          setTimeout(() => { state._suppressClick = false; }, 500);
+          onMapClickAdd(latLng);
+        } catch (e2) { /* 좌표 변환 실패 시 무시 */ }
+      }, 500);
+    }, { passive: true });
+    container.addEventListener("touchmove", (e) => {
+      if (timer && start && e.touches && e.touches[0]) {
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - start.x) > 12 || Math.abs(t.clientY - start.y) > 12) cancel();
+      }
+    }, { passive: true });
+    container.addEventListener("touchend", cancel, { passive: true });
+    container.addEventListener("touchcancel", cancel, { passive: true });
   }
 
   // 지정 좌표로 새 북마크 추가 시작
@@ -480,14 +529,7 @@
       state.map.setLevel(3);
       state.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng));
       const mk = state.markers.get(id);
-      if (mk) {
-        closeOpenIw();
-        mk.iw.open(state.map);
-        state.openIw = mk.iw;
-        setTimeout(() => {
-          document.querySelectorAll(".popup-item").forEach((it) => { it.onclick = () => openViewer(it.dataset.id); });
-        }, 0);
-      }
+      if (mk) openGroupPopup(mk.places, mk.pos);
       focusListItem(id);
     }, 160);
   }

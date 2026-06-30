@@ -1,5 +1,5 @@
 /* sw.js — 앱 셸 오프라인 캐시 (지도 타일은 네트워크 필요) */
-const CACHE = "yeogiyeogi-v3";
+const CACHE = "yeogiyeogi-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -43,7 +43,21 @@ self.addEventListener("fetch", (e) => {
     return; // 브라우저 기본 처리 (저장/재배포 금지)
   }
 
-  // 그 외: 캐시 우선, 없으면 네트워크 후 캐시
+  // 같은 출처(앱 파일 html/css/js): 네트워크 우선 → 항상 최신, 실패 시(오프라인) 캐시
+  if (url.origin === self.location.origin) {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // 그 외(jsPDF 등 외부 CDN): 캐시 우선, 없으면 네트워크 후 캐시
   e.respondWith(
     caches.match(req).then(
       (cached) =>

@@ -69,6 +69,22 @@
     toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
   }
 
+  // 진단 오버레이: 주소에 ?debug=1 이 있을 때만 화면에 상태를 표시 (폰 디버깅용)
+  function dbg(msg) {
+    if (!/[?&]debug/.test(location.search)) return;
+    let box = document.getElementById("dbgbox");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "dbgbox";
+      box.style.cssText =
+        "position:fixed;top:64px;left:8px;right:8px;z-index:99999;background:rgba(0,0,0,.88);" +
+        "color:#3df56b;font:12px/1.5 monospace;padding:10px;border-radius:8px;max-height:46vh;" +
+        "overflow:auto;white-space:pre-wrap;word-break:break-all";
+      document.body.appendChild(box);
+    }
+    box.textContent += msg + "\n";
+  }
+
   // 이미지 리사이즈 압축 -> dataURL (저장 용량 절감)
   function fileToCompressedDataURL(file, maxSize = 1280, quality = 0.82) {
     return new Promise((resolve, reject) => {
@@ -1471,14 +1487,30 @@
     renderList(); // 지도 뷰에 통합된 목록 초기 렌더
     renderBackupStat();
 
+    // 진단 (?debug=1): 폰에서 무엇이 막히는지 화면에 표시
+    window.addEventListener("error", (e) => dbg("ERR: " + (e.message || e)));
+    dbg("init 시작 | kakao=" + (typeof kakao !== "undefined") +
+        " maps=" + (typeof kakao !== "undefined" && !!kakao.maps) +
+        " load=" + (typeof kakao !== "undefined" && !!(kakao.maps && kakao.maps.load)));
+
     // 카카오맵 로드 후 지도/마커 초기화 (autoload=false 사용)
     if (window.kakao && kakao.maps && kakao.maps.load) {
       kakao.maps.load(() => {
-        initMap();
-        refreshMarkers();
+        dbg("kakao.maps.load 콜백 실행됨");
+        try {
+          initMap();
+          refreshMarkers();
+          const md = document.getElementById("map");
+          dbg("지도생성=" + !!state.map + " | 지도칸 크기=" + md.offsetWidth + "x" + md.offsetHeight);
+        } catch (err) {
+          dbg("initMap 오류: " + (err && err.message));
+        }
         // 모바일: 레이아웃 확정이 늦어 지도가 빈칸으로 뜨는 것 방지 (여러 번 relayout)
         [150, 500, 1200].forEach((t) => setTimeout(fixMapSize, t));
+        setTimeout(() => { const md = document.getElementById("map"); dbg("1.2초후 지도칸=" + md.offsetWidth + "x" + md.offsetHeight); }, 1300);
       });
+    } else {
+      dbg("카카오 SDK 미로딩 — 지도 초기화 건너뜀 (SDK 스크립트 로드 실패 가능)");
     }
     window.addEventListener("resize", fixMapSize);
     window.addEventListener("orientationchange", () => setTimeout(fixMapSize, 300));

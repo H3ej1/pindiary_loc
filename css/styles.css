@@ -254,6 +254,14 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .cal-day-records { padding: 16px 12px 28px; }
 .cal-day-records h3 { font-size: 14px; color: var(--muted); margin: 8px 4px; }
 
+/* 모바일: 달력 탭을 한 화면 스크롤로 (달력 + 그 아래 목록이 같이 스크롤됨) */
+@media (max-width: 767px) {
+  #view-calendar.active { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #view-calendar .map-list-wrap { display: block; height: auto; }
+  #view-calendar .cal-pane { flex: none; overflow: visible; }
+  #view-calendar .list-pane { flex: none; overflow: visible; min-height: 0; }
+}
+
 /* ===== 백업 ===== */
 .backup-panel { padding: 20px 16px 40px; max-width: 560px; margin: 0 auto; }
 .backup-panel h2 { margin-top: 0; }

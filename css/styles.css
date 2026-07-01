@@ -340,6 +340,17 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .small { font-size: 12px; }
 .backup-panel hr { border: none; border-top: 1px solid var(--line); margin: 20px 0; }
 
+/* 구글 드라이브 백업 그룹 */
+.gdrive-group {
+  background: #f2f7ff; border: 1px solid #dbe7ff; border-radius: 12px;
+  padding: 14px 14px 4px;
+}
+.gdrive-group .gdrive-note { margin: 0 0 12px; }
+.btn-ghost {
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  border-radius: 12px; padding: 11px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+
 /* ===== 탭바 ===== */
 .tabbar {
   height: calc(var(--tabbar-h) + var(--safe-bottom));

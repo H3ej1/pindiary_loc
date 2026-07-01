@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-192.png?v=11" />
 
-  <link rel="stylesheet" href="css/styles.css?v=1.0.3" />
+  <link rel="stylesheet" href="css/styles.css?v=1.1.0" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
@@ -103,6 +103,15 @@
           브라우저 데이터를 지우면 사라지므로 <b>가끔 백업 파일</b>로 내보내 두세요.
         </p>
         <div class="backup-stat" id="backup-stat">기록 0개 · 사진 0장</div>
+
+        <div class="gdrive-group">
+          <p class="muted small gdrive-note">☁️ 구글 드라이브에 백업해두면 폰을 바꿔도 그대로 복원할 수 있어요. (최신 + 직전 백업 1개를 자동 보관)</p>
+          <button id="btn-gdrive-backup" class="btn-primary">☁️ 구글 드라이브에 백업</button>
+          <button id="btn-gdrive-restore" class="btn-secondary">⬇️ 드라이브에서 복원 (최신)</button>
+          <button id="btn-gdrive-restore-prev" class="btn-ghost">↩️ 이전 백업에서 복원</button>
+        </div>
+        <hr />
+
         <button id="btn-manage-folders" class="btn-secondary">🗂️ 폴더 관리 (이름·색)</button>
         <button id="btn-export-json" class="btn-primary">📦 백업 파일 내보내기 (.json)</button>
         <label class="btn-secondary" for="file-import">📥 백업 파일 불러오기</label>
@@ -110,7 +119,7 @@
         <hr />
         <button id="btn-clear-all" class="btn-danger">⚠️ 모든 기록 삭제</button>
         <p class="muted small">
-          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.0.3</b>
+          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.1.0</b>
         </p>
       </div>
     </section>
@@ -276,7 +285,9 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&libraries=services&autoload=false"></script>
   <!-- jsPDF (PDF 내보내기) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="js/db.js?v=1.0.3"></script>
-  <script src="js/app.js?v=1.0.3"></script>
+  <!-- 구글 로그인 (드라이브 백업용) -->
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="js/db.js?v=1.1.0"></script>
+  <script src="js/app.js?v=1.1.0"></script>
 </body>
 </html>

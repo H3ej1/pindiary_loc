@@ -2,7 +2,7 @@
    같은 출처(앱 파일)는 HTTP 캐시까지 무시(no-store)하고 서버에서 직접 받는다.
    → 그냥 새로고침만 해도 즉시 최신이 뜬다(캐시 묵힘 없음). 활성화 시 과거 캐시 전부 제거.
    외부(카카오/CDN)는 건드리지 않음. fetch 핸들러 존재로 PWA 설치성 유지. */
-const SW_VERSION = "v7-nostore";
+const SW_VERSION = "v8-gdrive";
 
 self.addEventListener("install", () => {
   self.skipWaiting();

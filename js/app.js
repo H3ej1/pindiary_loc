@@ -1379,9 +1379,13 @@
     $("#backup-stat").textContent = `기록 ${state.places.length}개 · 사진 ${photos}장`;
   }
 
+  // 내보내기·드라이브 공용: 현재 상태를 백업 객체로 묶음(사진 포함)
+  function buildBackupData() {
+    return { app: "yeogi-yeogi", version: 2, exportedAt: new Date().toISOString(), folders: state.folders, places: state.places };
+  }
+
   function exportJSON() {
-    const data = { app: "yeogi-yeogi", version: 2, exportedAt: new Date().toISOString(), folders: state.folders, places: state.places };
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(buildBackupData())], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const d = new Date();
@@ -1394,34 +1398,200 @@
 
   async function importJSON(file) {
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      const list = Array.isArray(data) ? data : data.places;
-      if (!Array.isArray(list)) throw new Error("형식 오류");
-      // id 보정
-      const valid = list
-        .filter((p) => p && p.name)
-        .map((p) => ({ ...p, id: p.id || uid(), createdAt: p.createdAt || Date.now() }));
-      if (!confirm(`${valid.length}개의 기록을 불러옵니다. 같은 ID는 덮어씁니다. 계속할까요?`)) return;
-      await PlaceDB.bulkPut(valid);
-      // 폴더도 함께 복원(있으면 병합)
-      if (Array.isArray(data.folders) && data.folders.length) {
-        const fmap = new Map(state.folders.map((f) => [f.id, f]));
-        data.folders.forEach((f) => { if (f && f.id) fmap.set(f.id, f); });
-        state.folders = Array.from(fmap.values());
-        await PlaceDB.bulkPutFolders(state.folders);
-      }
-      // 메모리 병합
-      const map = new Map(state.places.map((p) => [p.id, p]));
-      valid.forEach((p) => map.set(p.id, p));
-      state.places = Array.from(map.values());
-      state._fitted = false;
-      refreshMarkers();
-      refreshActiveView();
-      renderBackupStat();
-      toast(`${valid.length}개 기록을 불러왔어요 ✓`);
+      await importFromText(await file.text());
     } catch (e) {
       toast("불러오기 실패: 올바른 백업 파일이 아니에요");
+    }
+  }
+
+  // 파일·드라이브 공용 복원: JSON 문자열을 받아 기존 기록에 병합
+  async function importFromText(text) {
+    const data = JSON.parse(text);
+    const list = Array.isArray(data) ? data : data.places;
+    if (!Array.isArray(list)) throw new Error("형식 오류");
+    // id 보정
+    const valid = list
+      .filter((p) => p && p.name)
+      .map((p) => ({ ...p, id: p.id || uid(), createdAt: p.createdAt || Date.now() }));
+    if (!confirm(`${valid.length}개의 기록을 불러옵니다. 같은 ID는 덮어씁니다. 계속할까요?`)) return;
+    await PlaceDB.bulkPut(valid);
+    // 폴더도 함께 복원(있으면 병합)
+    if (Array.isArray(data.folders) && data.folders.length) {
+      const fmap = new Map(state.folders.map((f) => [f.id, f]));
+      data.folders.forEach((f) => { if (f && f.id) fmap.set(f.id, f); });
+      state.folders = Array.from(fmap.values());
+      await PlaceDB.bulkPutFolders(state.folders);
+    }
+    // 메모리 병합
+    const map = new Map(state.places.map((p) => [p.id, p]));
+    valid.forEach((p) => map.set(p.id, p));
+    state.places = Array.from(map.values());
+    state._fitted = false;
+    refreshMarkers();
+    refreshActiveView();
+    renderBackupStat();
+    toast(`${valid.length}개 기록을 불러왔어요 ✓`);
+  }
+
+  // ---------- 구글 드라이브 백업/복원 ----------
+  // 최신 파일 1개 + 직전 파일 1개(자동 보관)만 유지한다.
+  // 권한 범위는 drive.file → 이 앱이 만든 파일만 접근(구글 심사 불필요).
+  const GDRIVE = {
+    CLIENT_ID: "746685165176-trb72vmjkg36grnjpmfd8ks7r51im45j.apps.googleusercontent.com",
+    SCOPE: "https://www.googleapis.com/auth/drive.file",
+    FILE_NAME: "pindiary-backup.json",       // 최신
+    PREV_NAME: "pindiary-backup-prev.json",   // 직전(안전망)
+    tokenClient: null,
+    accessToken: null,
+    tokenExpiry: 0,
+  };
+
+  // 로그인해서 액세스 토큰 확보(유효하면 재사용). 반드시 클릭 이벤트 안에서 호출.
+  function gdriveGetToken() {
+    return new Promise((resolve, reject) => {
+      const g = window.google;
+      if (!g || !g.accounts || !g.accounts.oauth2) {
+        reject(new Error("구글 로그인 모듈 로드 전이에요. 인터넷 확인 후 다시 시도"));
+        return;
+      }
+      if (GDRIVE.accessToken && Date.now() < GDRIVE.tokenExpiry - 60000) {
+        resolve(GDRIVE.accessToken);
+        return;
+      }
+      if (!GDRIVE.tokenClient) {
+        GDRIVE.tokenClient = g.accounts.oauth2.initTokenClient({
+          client_id: GDRIVE.CLIENT_ID,
+          scope: GDRIVE.SCOPE,
+          callback: () => {},
+        });
+      }
+      GDRIVE.tokenClient.callback = (resp) => {
+        if (!resp || resp.error) {
+          reject(new Error((resp && (resp.error_description || resp.error)) || "로그인 취소"));
+          return;
+        }
+        GDRIVE.accessToken = resp.access_token;
+        GDRIVE.tokenExpiry = Date.now() + ((resp.expires_in || 3600) * 1000);
+        resolve(resp.access_token);
+      };
+      try {
+        GDRIVE.tokenClient.requestAccessToken({ prompt: "" });
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function gdriveHeaders(token, extra) {
+    return Object.assign({ Authorization: "Bearer " + token }, extra || {});
+  }
+
+  // 이름으로 이 앱이 만든 파일 찾기(없으면 null)
+  async function gdriveFindByName(token, name) {
+    const q = encodeURIComponent(`name='${name}' and trashed=false`);
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`,
+      { headers: gdriveHeaders(token) }
+    );
+    if (!res.ok) throw new Error("드라이브 조회 실패 (" + res.status + ")");
+    const data = await res.json();
+    return (data.files && data.files[0]) || null;
+  }
+
+  async function gdriveDeleteFile(token, id) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+      method: "DELETE", headers: gdriveHeaders(token),
+    });
+    if (!res.ok && res.status !== 404) throw new Error("이전 파일 정리 실패 (" + res.status + ")");
+  }
+
+  async function gdriveRenameFile(token, id, newName) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+      method: "PATCH",
+      headers: gdriveHeaders(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: newName }),
+    });
+    if (!res.ok) throw new Error("이름 변경 실패 (" + res.status + ")");
+  }
+
+  async function gdriveCreateFile(token, name, jsonStr) {
+    const metadata = { name, mimeType: "application/json" };
+    const boundary = "pindiaryBoundary" + Date.now().toString(36);
+    const body =
+      `--${boundary}\r\n` +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      JSON.stringify(metadata) + "\r\n" +
+      `--${boundary}\r\n` +
+      "Content-Type: application/json\r\n\r\n" +
+      jsonStr + "\r\n" +
+      `--${boundary}--`;
+    const res = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+      {
+        method: "POST",
+        headers: gdriveHeaders(token, { "Content-Type": `multipart/related; boundary=${boundary}` }),
+        body,
+      }
+    );
+    if (!res.ok) throw new Error("업로드 실패 (" + res.status + ")");
+    return res.json();
+  }
+
+  async function gdriveDownloadById(token, id) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {
+      headers: gdriveHeaders(token),
+    });
+    if (!res.ok) throw new Error("다운로드 실패 (" + res.status + ")");
+    return res.text();
+  }
+
+  async function gdriveBackup() {
+    const btn = $("#btn-gdrive-backup");
+    if (btn) btn.disabled = true;
+    try {
+      toast("구글 로그인 확인 중…");
+      const token = await gdriveGetToken();
+      // 실수로 빈 데이터를 덮어쓰는 사고 방지
+      if (state.places.length === 0 &&
+          !confirm("지금 기록이 0개예요. 드라이브의 기존 백업을 빈 내용으로 덮어쓸 수 있어요. 계속할까요?")) {
+        return;
+      }
+      toast("드라이브에 올리는 중…");
+      // 최신 → 이전으로 한 칸 밀기(안전망), 그 뒤 새 최신 생성
+      const latest = await gdriveFindByName(token, GDRIVE.FILE_NAME);
+      if (latest) {
+        const prev = await gdriveFindByName(token, GDRIVE.PREV_NAME);
+        if (prev) await gdriveDeleteFile(token, prev.id);
+        await gdriveRenameFile(token, latest.id, GDRIVE.PREV_NAME);
+      }
+      await gdriveCreateFile(token, GDRIVE.FILE_NAME, JSON.stringify(buildBackupData()));
+      toast("드라이브에 백업했어요 ☁️✓");
+    } catch (e) {
+      toast("드라이브 백업 실패: " + (e.message || "다시 시도"));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // kind: "latest" | "prev"
+  async function gdriveRestore(kind) {
+    const btnId = kind === "prev" ? "#btn-gdrive-restore-prev" : "#btn-gdrive-restore";
+    const btn = $(btnId);
+    if (btn) btn.disabled = true;
+    try {
+      toast("구글 로그인 확인 중…");
+      const token = await gdriveGetToken();
+      toast("드라이브에서 가져오는 중…");
+      const name = kind === "prev" ? GDRIVE.PREV_NAME : GDRIVE.FILE_NAME;
+      const file = await gdriveFindByName(token, name);
+      if (!file) {
+        toast(kind === "prev" ? "드라이브에 이전 백업이 없어요" : "드라이브에 백업 파일이 없어요");
+        return;
+      }
+      const text = await gdriveDownloadById(token, file.id);
+      await importFromText(text);
+    } catch (e) {
+      toast("드라이브 복원 실패: " + (e.message || "다시 시도"));
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -1582,6 +1752,10 @@
     });
     $("#btn-clear-all").addEventListener("click", clearAll);
     $("#btn-manage-folders").addEventListener("click", openFolderManager);
+    // 구글 드라이브 백업/복원
+    const gb = $("#btn-gdrive-backup"); if (gb) gb.addEventListener("click", gdriveBackup);
+    const gr = $("#btn-gdrive-restore"); if (gr) gr.addEventListener("click", () => gdriveRestore("latest"));
+    const grp = $("#btn-gdrive-restore-prev"); if (grp) grp.addEventListener("click", () => gdriveRestore("prev"));
 
     // 모달 배경 클릭으로 닫기
     $$(".modal").forEach((m) =>

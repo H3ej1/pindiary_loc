@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-192.png?v=11" />
 
-  <link rel="stylesheet" href="css/styles.css?v=1.0.2" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.3" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
@@ -49,12 +49,12 @@
               <option value="rating-desc">별점 높은순</option>
               <option value="name-asc">이름순</option>
             </select>
-            <label class="list-date-field">
-              <span class="list-date-ico" aria-hidden="true">📅</span>
-              <input id="list-date" type="date" aria-label="특정 날짜의 기록만 보기" />
-              <button id="list-date-clear" type="button" class="list-date-clear" hidden aria-label="날짜 필터 해제">✕ 전체</button>
-            </label>
           </div>
+          <label class="list-date-field">
+            <span class="list-date-ico" aria-hidden="true">📅</span>
+            <input id="list-date" type="date" aria-label="특정 날짜의 기록만 보기" />
+            <button id="list-date-clear" type="button" class="list-date-clear" hidden aria-label="날짜 필터 해제">✕ 전체</button>
+          </label>
           <div id="cat-filter" class="cat-filter"></div>
           <div id="list-container" class="card-grid"></div>
           <p id="list-empty" class="empty-state">아직 기록한 장소가 없어요.<br />오른쪽 위 <b>＋ 장소</b>로 첫 기록을 남겨보세요!</p>
@@ -110,7 +110,7 @@
         <hr />
         <button id="btn-clear-all" class="btn-danger">⚠️ 모든 기록 삭제</button>
         <p class="muted small">
-          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.0.2</b>
+          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.0.3</b>
         </p>
       </div>
     </section>
@@ -276,7 +276,7 @@
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&libraries=services&autoload=false"></script>
   <!-- jsPDF (PDF 내보내기) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="js/db.js?v=1.0.2"></script>
-  <script src="js/app.js?v=1.0.2"></script>
+  <script src="js/db.js?v=1.0.3"></script>
+  <script src="js/app.js?v=1.0.3"></script>
 </body>
 </html>

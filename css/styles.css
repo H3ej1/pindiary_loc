@@ -166,13 +166,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: var(--bg);
   z-index: 5;
 }
-/* 특정 하루만 보기(날짜 필터) — 툴바 아래 한 줄 차지 */
+/* 특정 하루만 보기(날짜 필터) — 항상 보이는 독립 줄(모바일에서 🔍 토글에 안 숨음) */
 .list-date-field {
-  flex-basis: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
   height: 40px;
+  margin: 0 12px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0 10px;

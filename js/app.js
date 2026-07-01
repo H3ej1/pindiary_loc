@@ -275,6 +275,7 @@
         position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3, clickable: true,
       });
       overlay.setMap(state.map);
+      state.overlays.push(overlay); // 다음 refresh 때 제거되도록 추적(안 하면 옛 핀이 안 지워짐)
       el.addEventListener("click", () => openGroupPopup(places, pos));
 
       // 그룹 내 모든 id가 같은 위치/목록을 가리키도록(focus/이동용)

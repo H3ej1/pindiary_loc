@@ -85,6 +85,38 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   .list-pane { flex: 0 0 380px; border-left: 1px solid var(--line); }
 }
 
+/* ===== 모바일 지도 탭: 목록 바텀시트(서랍) ===== */
+/* 손잡이는 기본(데스크톱) 숨김, 모바일 지도 탭에서만 노출 */
+.sheet-handle { display: none; }
+@media (max-width: 767px) {
+  /* 지도는 화면을 꽉 채우고, 목록은 아래에서 손잡이로 끌어올리는 서랍이 된다 */
+  #view-map .map-list-wrap { position: relative; }
+  #view-map .map-pane { position: absolute; inset: 0; flex: none; }
+  #view-map .list-pane {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 52%;                 /* 최대 높이 = 기존 목록 높이. 지도 최소 48% */
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    z-index: 20;
+    transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: transform;
+    overscroll-behavior: contain;
+    /* JS 로드 전 초기 모습: 손잡이만 보이도록 살짝 내려둔 폴백(JS가 정확히 덮어씀) */
+    transform: translateY(calc(100% - 56px));
+  }
+  #view-map .sheet-handle {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position: sticky; top: 0; z-index: 6;
+    padding: 8px 0 10px;
+    background: var(--surface);
+    border-radius: 16px 16px 0 0;
+    cursor: grab; touch-action: none; user-select: none;
+  }
+  #view-map .sheet-handle:active { cursor: grabbing; }
+  #view-map .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: #c7ccd6; }
+  #view-map .sheet-handle-label { font-size: 12px; font-weight: 700; color: var(--muted); }
+}
+
 /* 목록 검색·정렬 토글 (모바일 전용) — 기본 숨김 */
 .list-search-toggle { display: none; }
 @media (max-width: 767px) {
@@ -128,10 +160,42 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   position: sticky;
   top: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 12px;
   background: var(--bg);
   z-index: 5;
+}
+/* 특정 하루만 보기(날짜 필터) — 툴바 아래 한 줄 차지 */
+.list-date-field {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 10px;
+  background: var(--surface);
+}
+.list-date-ico { font-size: 14px; }
+.list-date-field input[type="date"] {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+.list-date-clear {
+  border: none;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
 }
 .list-toolbar input,
 .list-toolbar select {
@@ -251,7 +315,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .cal-bar.no-folder { color: #fff; background: #adb5bd; }
 .cal-bar.more { background: transparent; color: var(--muted); padding: 0 4px; font-weight: 700; }
 @media (max-width: 480px) { .cal-bar { font-size: 8px; padding: 1px 3px; } }
-.cal-day-records { padding: 16px 12px 28px; }
+.cal-day-records { padding: 16px 12px 28px; display: flex; flex-direction: column; gap: 12px; }
 .cal-day-records h3 { font-size: 14px; color: var(--muted); margin: 8px 4px; }
 
 /* 모바일: 달력 탭을 한 화면 스크롤로 (달력 + 그 아래 목록이 같이 스크롤됨) */

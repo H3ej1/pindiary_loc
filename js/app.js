@@ -13,6 +13,7 @@
     calCursor: null, // 달력 기준 월 (Date)
     selectedDay: null, // 'YYYY-MM-DD'
     catFilter: "all", // 목록 폴더 필터
+    dateFilter: "", // 'YYYY-MM-DD' — 특정 하루만 보기(빈 값=전체)
     folders: [], // 사용자 정의 폴더 [{id,name,color}]
   };
 
@@ -59,6 +60,15 @@
   }
 
   function starStr(n) { return "★★★★★".slice(0, n) + "☆☆☆☆☆".slice(0, 5 - n); }
+
+  // 카카오 검색 키는 배포 도메인(h3ej1.github.io)에서만 동작.
+  // 로컬 파일(file://)이나 미등록 주소에서는 검색이 막히므로, 그 상황엔 안내 문구를 다르게 보여준다.
+  function searchFailMsg() {
+    const onApp = /(^|\.)h3ej1\.github\.io$/i.test(location.hostname);
+    return onApp
+      ? "검색 실패 (네트워크 확인)."
+      : "이 주소에선 검색이 안 돼요. 앱 링크(h3ej1.github.io)에서 검색해 주세요.";
+  }
 
   let toastTimer = null;
   function toast(msg) {
@@ -127,6 +137,8 @@
     if (name === "map") {
       renderList(); // 목록이 지도 뷰에 통합됨
       if (state.map) setTimeout(fixMapSize, 60);
+      // 서랍은 뷰가 보일 때만 높이 측정 가능 → 탭 복귀 시 재배치
+      if (state.listSheet) setTimeout(() => state.listSheet.enable(false), 60);
     }
     if (name === "folders") renderFoldersHome();
     if (name === "calendar") renderCalendar();
@@ -236,6 +248,7 @@
     const groups = new Map();
     state.places.forEach((p) => {
       if (p.lat == null || p.lng == null) return;
+      if (state.dateFilter && p.date !== state.dateFilter) return; // 특정 하루만
       const k = coordKey(p);
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(p);
@@ -250,7 +263,7 @@
 
       // 폴더색 핀 + 이름 라벨을 커스텀 오버레이로
       const fc = folderById(places[0].category);
-      const color = fc ? fc.color : "#ff6b6b";
+      const color = fc ? fc.color : "#868e96"; // 폴더 없음 = 회색(맛집 빨강과 구분)
       const label = places.length > 1 ? `${places[0].name} +${places.length - 1}` : places[0].name;
       const el = document.createElement("div");
       el.className = "kk-pin-wrap";
@@ -382,7 +395,7 @@
       } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
         box.innerHTML = "<li>검색 결과가 없어요.</li>";
       } else {
-        box.innerHTML = "<li>검색 실패 (네트워크 확인).</li>";
+        box.innerHTML = "<li>" + searchFailMsg() + "</li>";
       }
     }, opts);
   }
@@ -419,6 +432,9 @@
     renderCatFilter();
     if (state.catFilter !== "all") {
       items = items.filter((p) => p.category === state.catFilter);
+    }
+    if (state.dateFilter) {
+      items = items.filter((p) => p.date === state.dateFilter);
     }
 
     if (q) {
@@ -779,7 +795,7 @@
       } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
         results.innerHTML = `<li>검색 결과가 없어요. 지도를 직접 눌러 위치를 찍어보세요.</li>`;
       } else {
-        results.innerHTML = `<li>검색 실패 (네트워크 확인). 지도를 직접 눌러도 됩니다.</li>`;
+        results.innerHTML = `<li>${searchFailMsg()} 지도를 직접 눌러도 됩니다.</li>`;
       }
     }, opts);
   }
@@ -1524,6 +1540,22 @@
     // 목록
     $("#list-search").addEventListener("input", renderList);
     $("#list-sort").addEventListener("change", renderList);
+    // 특정 하루만 보기: 목록 + 지도 핀 함께 필터
+    $("#list-date").addEventListener("change", (e) => {
+      state.dateFilter = e.target.value || "";
+      $("#list-date-clear").hidden = !state.dateFilter;
+      renderList();
+      state._fitted = false; // 필터된 핀에 맞춰 지도 범위 다시 맞춤
+      refreshMarkers();
+    });
+    $("#list-date-clear").addEventListener("click", () => {
+      state.dateFilter = "";
+      $("#list-date").value = "";
+      $("#list-date-clear").hidden = true;
+      renderList();
+      state._fitted = false; // 전체로 되돌리며 지도 범위 재조정
+      refreshMarkers();
+    });
     $("#list-search-toggle").addEventListener("click", () =>
       $(".list-pane .list-toolbar").classList.toggle("show")
     );
@@ -1558,6 +1590,101 @@
     );
   }
 
+  // ---------- 모바일 지도 탭: 목록 바텀시트(서랍) ----------
+  // 지도가 화면을 채우고, 목록은 아래 손잡이를 끌어 3단계(작게/중간/최대)로 올라온다.
+  // 최대 = 시트 높이 100%(=기존 목록 높이, 지도 최소 48%), 작게 = 손잡이만 보임.
+  function initListSheet() {
+    const sheet = document.querySelector("#view-map .list-pane");
+    const handle = document.getElementById("sheet-handle");
+    if (!sheet || !handle) return;
+    const mq = window.matchMedia("(max-width: 767px)");
+
+    let stops = [0, 0, 0]; // translateY(px): [작게(큰값)·중간·최대(0)]
+    let idx = 0; // 현재 단계 (0=작게)
+    let live = 0; // 현재 적용된 translateY
+
+    function computeStops() {
+      const h = sheet.offsetHeight; // 시트 높이(컨테이너의 52%)
+      const handleH = handle.offsetHeight || 54;
+      const peek = Math.max(0, h - handleH); // 손잡이만 보이게
+      const mid = Math.round(peek * 0.45); // 중간 정착점
+      stops = [peek, mid, 0];
+    }
+    function place(px) {
+      live = px;
+      sheet.style.transform = "translateY(" + px + "px)";
+    }
+    function snapTo(i) {
+      idx = Math.max(0, Math.min(2, i));
+      sheet.style.transition = ""; // CSS 전환으로 부드럽게
+      place(stops[idx]);
+    }
+    function enable(reset) {
+      if (!mq.matches) { disable(); return; } // 데스크톱에선 서랍 비활성(레이아웃 원복)
+      computeStops();
+      sheet.style.willChange = "transform";
+      if (reset) idx = 0; // 처음엔 작게(peek)
+      idx = Math.max(0, Math.min(2, idx));
+      sheet.style.transition = "none"; // 초기 배치는 애니메이션 없이
+      place(stops[idx]);
+      void sheet.offsetHeight; // 강제 리플로우
+      sheet.style.transition = "";
+    }
+    function disable() {
+      sheet.style.transform = ""; // 데스크톱: 인라인 스타일 제거
+      sheet.style.transition = "";
+      sheet.style.willChange = "";
+    }
+    function sync(reset) {
+      if (mq.matches) enable(reset);
+      else disable();
+    }
+
+    // 드래그 (포인터 = 터치·마우스 공용)
+    let dragging = false, startY = 0, startShift = 0, moved = false;
+    handle.addEventListener("pointerdown", (e) => {
+      if (!mq.matches) return;
+      dragging = true; moved = false;
+      startY = e.clientY; startShift = live;
+      sheet.style.transition = "none";
+      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dy = e.clientY - startY;
+      if (Math.abs(dy) > 6) moved = true;
+      let px = startShift + dy;
+      px = Math.max(stops[2], Math.min(stops[0], px)); // 최대(0)~작게(peek) 사이
+      place(px);
+      e.preventDefault();
+    });
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      if (moved) {
+        // 놓은 위치에서 가장 가까운 단계로 스냅
+        let best = 0, bd = Infinity;
+        stops.forEach((s, i) => { const d = Math.abs(s - live); if (d < bd) { bd = d; best = i; } });
+        snapTo(best);
+      } else {
+        snapTo(idx >= 2 ? 0 : idx + 1); // 탭 = 다음 단계(순환)
+      }
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+    handle.addEventListener("keydown", (e) => {
+      if (!mq.matches) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); snapTo(idx >= 2 ? 0 : idx + 1); }
+    });
+
+    if (mq.addEventListener) mq.addEventListener("change", () => sync(true));
+    else mq.addListener(() => sync(true));
+    window.addEventListener("resize", () => { if (mq.matches && !dragging) enable(false); });
+
+    state.listSheet = { sync, enable };
+    sync(true);
+  }
+
   // ---------- 시작 ----------
   async function init() {
     bindEvents();
@@ -1574,6 +1701,9 @@
     }
     renderList(); // 지도 뷰에 통합된 목록 초기 렌더
     renderBackupStat();
+    initListSheet(); // 모바일 목록 서랍
+    // 모바일은 레이아웃 확정이 늦어 초기 시트 높이 오측정 가능 → 재배치
+    [200, 700].forEach((t) => setTimeout(() => state.listSheet && state.listSheet.enable(false), t));
 
     // 카카오맵 로드 후 지도/마커 초기화 (autoload=false 사용)
     if (window.kakao && kakao.maps && kakao.maps.load) {

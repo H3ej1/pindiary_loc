@@ -53,6 +53,14 @@
     return `${y}.${m}.${d}`;
   }
 
+  // ISO 문자열 → "2026.07.01 14:30"
+  function fmtDateTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function escapeHtml(str) {
     return String(str || "").replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
@@ -1377,6 +1385,23 @@
   function renderBackupStat() {
     const photos = state.places.reduce((n, p) => n + ((p.photos && p.photos.length) || (p.photo ? 1 : 0)), 0);
     $("#backup-stat").textContent = `기록 ${state.places.length}개 · 사진 ${photos}장`;
+    renderLastBackup();
+  }
+
+  // 마지막 드라이브 백업 시각(이 기기 기준) 표시
+  const LAST_BACKUP_KEY = "pindiary_last_backup";
+  function renderLastBackup() {
+    const el = $("#gdrive-last");
+    if (!el) return;
+    let iso = null;
+    try { iso = localStorage.getItem(LAST_BACKUP_KEY); } catch (_) {}
+    el.textContent = iso
+      ? `마지막 드라이브 백업: ${fmtDateTime(iso)}`
+      : "마지막 드라이브 백업: 아직 없음";
+  }
+  function setLastBackup(iso) {
+    try { localStorage.setItem(LAST_BACKUP_KEY, iso); } catch (_) {}
+    renderLastBackup();
   }
 
   // 내보내기·드라이브 공용: 현재 상태를 백업 객체로 묶음(사진 포함)
@@ -1563,6 +1588,7 @@
         await gdriveRenameFile(token, latest.id, GDRIVE.PREV_NAME);
       }
       await gdriveCreateFile(token, GDRIVE.FILE_NAME, JSON.stringify(buildBackupData()));
+      setLastBackup(new Date().toISOString());
       toast("드라이브에 백업했어요 ☁️✓");
     } catch (e) {
       toast("드라이브 백업 실패: " + (e.message || "다시 시도"));
@@ -1588,6 +1614,8 @@
       }
       const text = await gdriveDownloadById(token, file.id);
       await importFromText(text);
+      // 다른 기기에서 복원한 경우에도, 그 백업이 만들어진 시각을 표시에 반영
+      if (file.modifiedTime) setLastBackup(file.modifiedTime);
     } catch (e) {
       toast("드라이브 복원 실패: " + (e.message || "다시 시도"));
     } finally {

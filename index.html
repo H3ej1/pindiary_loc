@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-192.png?v=11" />
 
-  <link rel="stylesheet" href="css/styles.css?v=1.1.0" />
+  <link rel="stylesheet" href="css/styles.css?v=1.1.1" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
@@ -109,6 +109,7 @@
           <button id="btn-gdrive-backup" class="btn-primary">☁️ 구글 드라이브에 백업</button>
           <button id="btn-gdrive-restore" class="btn-secondary">⬇️ 드라이브에서 복원 (최신)</button>
           <button id="btn-gdrive-restore-prev" class="btn-ghost">↩️ 이전 백업에서 복원</button>
+          <p class="muted small gdrive-last" id="gdrive-last">마지막 드라이브 백업: 아직 없음</p>
         </div>
         <hr />
 
@@ -119,7 +120,7 @@
         <hr />
         <button id="btn-clear-all" class="btn-danger">⚠️ 모든 기록 삭제</button>
         <p class="muted small">
-          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.1.0</b>
+          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.1.1</b>
         </p>
       </div>
     </section>
@@ -287,7 +288,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- 구글 로그인 (드라이브 백업용) -->
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <script src="js/db.js?v=1.1.0"></script>
-  <script src="js/app.js?v=1.1.0"></script>
+  <script src="js/db.js?v=1.1.1"></script>
+  <script src="js/app.js?v=1.1.1"></script>
 </body>
 </html>

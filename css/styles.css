@@ -346,6 +346,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   padding: 14px 14px 4px;
 }
 .gdrive-group .gdrive-note { margin: 0 0 12px; }
+.gdrive-group .gdrive-last { margin: 2px 0 10px; text-align: center; font-weight: 600; }
 .btn-ghost {
   border: 1px solid var(--line); background: transparent; color: var(--muted);
   border-radius: 12px; padding: 11px 16px; font-size: 14px; font-weight: 600; cursor: pointer;

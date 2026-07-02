@@ -10,7 +10,9 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-192.png?v=11" />
 
-  <link rel="stylesheet" href="css/styles.css?v=1.1.1" />
+  <!-- Leaflet (전세계 지도 엔진) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/styles.css?v=2.0.0" />
 </head>
 <body>
   <!-- ===== 헤더 ===== -->
@@ -29,6 +31,7 @@
       <div class="map-list-wrap">
         <div class="map-pane">
           <div id="map"></div>
+          <button id="map-engine-toggle" class="map-engine-toggle" type="button" title="지도 종류 전환 (국내 카카오 ↔ 전세계)">🌐 전세계</button>
           <div class="map-search">
             <input id="map-search-input" type="search" placeholder="🔍 장소 검색 (가게·주소) → 선택해 바로 추가" autocomplete="off" />
             <ul id="map-search-results" class="map-search-results"></ul>
@@ -120,7 +123,7 @@
         <hr />
         <button id="btn-clear-all" class="btn-danger">⚠️ 모든 기록 삭제</button>
         <p class="muted small">
-          지도·검색: 카카오맵 — 무료, 기록은 이 기기에만 저장 · <b>버전 1.1.1</b>
+          지도: 카카오맵(국내) + Leaflet·CARTO(전세계) — 무료, 기록은 이 기기에만 저장 · <b>버전 2.0.0</b>
         </p>
       </div>
     </section>
@@ -282,13 +285,16 @@
 
   <canvas id="export-canvas" width="800" height="1000" hidden></canvas>
 
-  <!-- 카카오맵 (지도/검색, autoload=false → kakao.maps.load로 초기화) -->
+  <!-- 카카오맵 (국내 지도/검색, autoload=false → kakao.maps.load로 초기화) -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0646c2f5f3a47f6ba4261c132283d70e&libraries=services&autoload=false"></script>
+  <!-- Leaflet (전세계 지도 엔진) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- jsPDF (PDF 내보내기) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- 구글 로그인 (드라이브 백업용) -->
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <script src="js/db.js?v=1.1.1"></script>
-  <script src="js/app.js?v=1.1.1"></script>
+  <script src="js/db.js?v=2.0.0"></script>
+  <script src="js/mapengine.js?v=2.0.0"></script>
+  <script src="js/app.js?v=2.0.0"></script>
 </body>
 </html>

@@ -678,3 +678,24 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   margin-top: 6px; border: none; background: var(--accent); color: #fff;
   border-radius: 8px; padding: 6px 10px; font-weight: 700; cursor: pointer;
 }
+
+/* ===== 지도 엔진 전환 버튼 (국내 카카오 ↔ 전세계 Leaflet) ===== */
+.map-engine-toggle {
+  position: absolute; top: 62px; right: 10px; z-index: 10;
+  border: none; border-radius: 999px; padding: 7px 12px;
+  background: #fff; color: #2b2f3a; font-size: 13px; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); cursor: pointer; white-space: nowrap;
+}
+.map-engine-toggle:active { transform: scale(0.96); }
+
+/* ===== Leaflet(전세계) 엔진: 커스텀 오버레이 앵커 & 말풍선 ===== */
+/* 빈 divIcon(0×0)에 실제 요소를 append → 좌표에 바닥-중앙 정렬(핀 끝이 좌표에 오게) */
+.lf-overlay { background: none; border: none; }
+.lf-overlay > * { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); }
+/* Leaflet 팝업 기본 흰 박스/그림자/꼬리 제거 → 앱의 .map-popup 만 보이게 */
+.lf-bare-popup .leaflet-popup-content-wrapper { background: none; box-shadow: none; padding: 0; border-radius: 0; }
+.lf-bare-popup .leaflet-popup-content { margin: 0; width: auto !important; }
+.lf-bare-popup .leaflet-popup-tip-container { display: none; }
+.lf-bare-popup a.leaflet-popup-close-button { display: none; }
+/* Leaflet 줌 컨트롤이 좌상단 검색창과 덜 겹치도록 살짝 내림 */
+.leaflet-top.leaflet-left { top: 56px; }

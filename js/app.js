@@ -5,8 +5,9 @@
   // ---------- 상태 ----------
   const state = {
     places: [],
-    map: null,
-    markers: new Map(), // id -> marker
+    mainMap: null, // 메인 지도 드라이버 (mapengine.js)
+    engine: "kakao", // 현재 메인 지도 엔진: "kakao"(국내) | "leaflet"(전세계)
+    markers: new Map(), // id -> { places, lat, lng }
     editorMap: null,
     editorMarker: null,
     draft: null, // 편집 중인 레코드
@@ -144,7 +145,7 @@
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
     if (name === "map") {
       renderList(); // 목록이 지도 뷰에 통합됨
-      if (state.map) setTimeout(fixMapSize, 60);
+      if (state.mainMap) setTimeout(fixMapSize, 60);
       // 서랍은 뷰가 보일 때만 높이 측정 가능 → 탭 복귀 시 재배치
       if (state.listSheet) setTimeout(() => state.listSheet.enable(false), 60);
     }
@@ -153,45 +154,122 @@
     if (name === "backup") renderBackupStat();
   }
 
-  // ---------- 지도 (메인) — 카카오맵 ----------
+  // ---------- 지도 (메인) — 엔진 어댑터(카카오 국내 ↔ Leaflet 전세계) ----------
   // 카카오 level: 숫자가 작을수록 확대(가까움). 3~4 = 거리/건물 보이는 줌.
-  function initMap() {
-    const container = document.getElementById("map");
-    state.map = new kakao.maps.Map(container, {
-      center: new kakao.maps.LatLng(37.5665, 126.978),
-      level: 4,
-    });
-    // 줌 컨트롤만 (스카이뷰 토글은 사용 안 함)
-    state.map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  // 실제 지도 조작은 state.mainMap 드라이버(mapengine.js)를 통해 이뤄진다.
+  // ★ 엔진을 바꿔도 북마크 좌표(lat/lng)는 그대로 — 그래픽(엔진)만 바뀐다.
+  // 엔진 전환 시 이전 지도 라이브러리(카카오/Leaflet)가 컨테이너에 남긴 잔재
+  // (_leaflet_id·leaflet 클래스·인라인 스타일 등)를 없애기 위해 #map을 깨끗한 새 노드로 교체.
+  // 잔재 위에 다른 지도 엔진을 초기화하면 렌더가 깨지므로 매번 새 컨테이너를 쓴다.
+  function getFreshMapContainer() {
+    const old = document.getElementById("map");
+    const fresh = old.cloneNode(false); // 자식 없이 id/class만 복제 (_leaflet_id 같은 expando는 복제 안 됨)
+    fresh.removeAttribute("style"); // 이전 엔진이 남긴 인라인 스타일 제거
+    fresh.className = (old.className || "")
+      .split(/\s+/).filter((c) => c && !c.startsWith("leaflet")).join(" ");
+    old.parentNode.replaceChild(fresh, old);
+    return fresh;
+  }
 
-    // 좌클릭/탭 → 열린 추가핀·말풍선 닫기 / 우클릭(PC)·길게누르기(폰) → 추가 핀 표시
-    kakao.maps.event.addListener(state.map, "click", () => {
-      if (state._suppressClick) return;
-      clearTempMarker();
-      closeOpenPopup();
+  function buildMainMap(view) {
+    const container = getFreshMapContainer();
+    state.mainMap = MapEngine.create(state.engine, container, {
+      lat: view ? view.lat : 37.5665,
+      lng: view ? view.lng : 126.978,
+      level: view ? view.level : 4,
+      // 좌클릭/탭 → 열린 추가핀·말풍선 닫기
+      onBgClick: () => { clearTempMarker(); closeOpenPopup(); },
+      // 우클릭(PC)·길게누르기(폰) → 그 위치에 추가 핀
+      onAddRequest: (lat, lng) => onMapClickAdd(lat, lng),
     });
-    kakao.maps.event.addListener(state.map, "rightclick", (mouseEvent) => onMapClickAdd(mouseEvent.latLng));
-    setupLongPressAdd();
+  }
 
-    // 현재 위치로 이동 시도
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (state.places.length === 0)
-            state.map.setCenter(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
-        },
-        () => {},
-        { timeout: 5000 }
-      );
+  // 첫 진입 시 현재 위치로 이동 시도 (기록이 하나도 없을 때만)
+  function tryGeolocateOnce() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (state.places.length === 0 && state.mainMap)
+          state.mainMap.setCenter(pos.coords.latitude, pos.coords.longitude);
+      },
+      () => {},
+      { timeout: 5000 }
+    );
+  }
+
+  // 지도 엔진 전환 (카카오 ↔ Leaflet). 보던 위치/줌 유지, 데이터는 불변.
+  function switchMapEngine(engine) {
+    if (!state.mainMap || state.engine === engine) return;
+    // 대상 엔진이 준비돼 있는지 먼저 확인 — 없으면 현재 지도를 부수지 않고 그대로 유지한다.
+    // (카카오 키는 배포 도메인 전용이라 localhost 등에선 카카오가 로드되지 않을 수 있음)
+    if (engine === "kakao" && !(window.kakao && kakao.maps && kakao.maps.Map)) {
+      toast("국내(카카오) 지도를 불러오지 못했어요. 배포 주소에서 사용해 주세요.");
+      return;
     }
+    if (engine === "leaflet" && !window.L) {
+      toast("전세계 지도를 불러오지 못했어요 (인터넷 확인).");
+      return;
+    }
+    let view = null;
+    try { view = state.mainMap.getView(); } catch (_) {}
+    try {
+      state.mainMap.destroy();
+      state.engine = engine;
+      state._fitted = true; // 수동 전환 시 자동 범위맞춤 없이 보던 위치 유지
+      buildMainMap(view);
+      refreshMarkers();
+      try { localStorage.setItem("pindiary.mapEngine", engine); } catch (_) {}
+    } catch (e) {
+      console.error("지도 전환 실패", e);
+      toast("지도 전환에 실패했어요");
+    }
+    updateEngineToggle(); // 버튼 라벨은 항상 현재 엔진에 맞춘다
+    setTimeout(fixMapSize, 60);
+  }
+
+  // 토글 버튼 라벨: 지금 누르면 "바뀔 대상"을 보여준다.
+  function updateEngineToggle() {
+    const btn = document.getElementById("map-engine-toggle");
+    if (!btn) return;
+    btn.textContent = state.engine === "kakao" ? "🌐 전세계" : "🇰🇷 국내";
   }
 
   // 모바일 등에서 컨테이너 크기 확정이 늦어 지도가 빈칸으로 뜨는 것 방지 (relayout)
   function fixMapSize() {
-    if (!state.map) return;
-    const c = state.map.getCenter();
-    state.map.relayout();
-    state.map.setCenter(c);
+    if (!state.mainMap) return;
+    try { state.mainMap.relayout(); } catch (_) { /* 파괴된 지도 등은 무시 */ }
+  }
+
+  // 메인 지도 시작(현재 엔진으로 생성 + 마커 + 위치이동 + 크기보정)
+  function startMap() {
+    buildMainMap();
+    refreshMarkers();
+    tryGeolocateOnce();
+    [150, 500, 1200].forEach((t) => setTimeout(fixMapSize, t));
+  }
+
+  // 지도 부트스트랩: 엔진에 맞춰 가능한 한 빨리 메인 지도를 띄운다.
+  // 카카오 SDK가 안 뜨는 환경(미등록 도메인·차단·해외 등)에서도 전세계(Leaflet)로 폴백해
+  // 항상 지도가 나오게 한다. (편집기 지도·국내 검색은 카카오가 있을 때만 동작 — Phase 2/3에서 이관 예정)
+  function bootstrapMap() {
+    const haveKakao = () => window.kakao && kakao.maps && kakao.maps.load;
+    // 저장된 엔진이 Leaflet이면 카카오를 기다릴 것 없이 바로 띄운다.
+    // 단, 카카오 SDK가 있으면 백그라운드로 load()를 걸어 편집기 지도·국내 검색(kakao.maps.*)을 준비시킨다.
+    if (state.engine === "leaflet" && window.L) {
+      startMap();
+      if (haveKakao()) kakao.maps.load(() => {});
+      return;
+    }
+    if (haveKakao()) { kakao.maps.load(startMap); return; }
+    // 카카오가 아직/영영 안 뜨면 잠깐 기다렸다가, 그래도 없으면 Leaflet로 폴백.
+    let waited = 0;
+    const timer = setInterval(() => {
+      if (haveKakao()) { clearInterval(timer); kakao.maps.load(startMap); }
+      else if ((waited += 300) >= 2400) {
+        clearInterval(timer);
+        if (window.L) { state.engine = "leaflet"; updateEngineToggle(); startMap(); }
+      }
+    }, 300);
   }
 
   // 같은 위치(≈1m) 북마크 묶기용 키
@@ -215,40 +293,29 @@
   }
 
   function closeOpenPopup() {
-    if (state.openPopup) { state.openPopup.setMap(null); state.openPopup = null; }
-    if (state.map && state.map.setZoomable) state.map.setZoomable(true); // 지도 줌 복구
+    if (state.mainMap) state.mainMap.closePopup();
   }
 
-  // 그룹 말풍선: 핀 위에 떠서 핀에 안 가림 + 흰 박스 안에서 스크롤 (커스텀 오버레이)
-  function openGroupPopup(places, pos) {
+  // 그룹 말풍선: 핀 위에 떠서 핀에 안 가림 + 흰 박스 안에서 스크롤.
+  // 요소만 만들고 실제 배치는 드라이버(state.mainMap.openPopup)가 담당.
+  function openGroupPopup(places, lat, lng) {
     closeOpenPopup();
     const wrap = document.createElement("div");
     wrap.className = "map-popup-wrap";
     wrap.innerHTML =
       `<div class="map-popup"><button class="map-popup-close" type="button" aria-label="닫기">✕</button>` +
       groupPopupHtml(places) + `</div>`;
-    const popup = new kakao.maps.CustomOverlay({
-      position: pos, content: wrap, xAnchor: 0.5, yAnchor: 1, zIndex: 1000, clickable: true,
-    });
-    popup.setMap(state.map);
-    state.openPopup = popup;
-    // 박스 안에서 스크롤할 때 지도가 같이 움직이지 않도록 (모바일)
-    wrap.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
-    // 데스크톱: 커서가 말풍선 위면 휠로 박스 스크롤(지도 줌 끔), 벗어나면 지도 줌 복구
-    wrap.addEventListener("mouseenter", () => { if (state.map.setZoomable) state.map.setZoomable(false); });
-    wrap.addEventListener("mouseleave", () => { if (state.map.setZoomable) state.map.setZoomable(true); });
     wrap.querySelector(".map-popup-close").addEventListener("click", () => closeOpenPopup());
     wrap.querySelectorAll(".popup-item").forEach((it) => {
       it.addEventListener("click", () => openViewer(it.dataset.id));
     });
+    state.mainMap.openPopup(lat, lng, wrap);
     focusListItem(places[0].id);
   }
 
   function refreshMarkers() {
-    if (!state.map) return;
-    // 기존 오버레이/말풍선 제거
-    (state.overlays || []).forEach((o) => o.setMap(null));
-    state.overlays = [];
+    if (!state.mainMap) return;
+    state.mainMap.clearPins();
     state.markers.clear();
     closeOpenPopup();
 
@@ -262,14 +329,11 @@
       groups.get(k).push(p);
     });
 
-    const bounds = new kakao.maps.LatLngBounds();
-    let any = false;
-
+    const points = [];
     groups.forEach((places) => {
       const lat = places[0].lat, lng = places[0].lng;
-      const pos = new kakao.maps.LatLng(lat, lng);
 
-      // 폴더색 핀 + 이름 라벨을 커스텀 오버레이로
+      // 폴더색 핀 + 이름 라벨 (엔진 무관 — 드라이버가 해당 지도에 얹는다)
       const fc = folderById(places[0].category);
       const color = fc ? fc.color : "#868e96"; // 폴더 없음 = 회색(맛집 빨강과 구분)
       const label = places.length > 1 ? `${places[0].name} +${places.length - 1}` : places[0].name;
@@ -278,29 +342,21 @@
       el.innerHTML =
         `<div class="kk-label">${escapeHtml(label)}</div>` +
         `<div class="cat-marker" style="background:${color}"><span class="cat-marker-dot"></span></div>`;
-
-      const overlay = new kakao.maps.CustomOverlay({
-        position: pos, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 3, clickable: true,
-      });
-      overlay.setMap(state.map);
-      state.overlays.push(overlay); // 다음 refresh 때 제거되도록 추적(안 하면 옛 핀이 안 지워짐)
-      el.addEventListener("click", () => openGroupPopup(places, pos));
+      state.mainMap.addPin(lat, lng, el, () => openGroupPopup(places, lat, lng));
 
       // 그룹 내 모든 id가 같은 위치/목록을 가리키도록(focus/이동용)
-      places.forEach((p) => state.markers.set(p.id, { overlay, pos, places }));
-      bounds.extend(pos);
-      any = true;
+      places.forEach((p) => state.markers.set(p.id, { places, lat, lng }));
+      points.push({ lat, lng });
     });
 
-    if (any && !state._fitted) {
-      state.map.setBounds(bounds);
+    if (points.length && !state._fitted) {
+      state.mainMap.fitBounds(points);
       state._fitted = true;
     }
   }
 
-  // 지도 클릭 → 임시 핀 + "여기에 북마크 추가" 버튼 (흰 말풍선 박스 없이 버튼만)
-  function onMapClickAdd(latLng) {
-    const lat = latLng.getLat(), lng = latLng.getLng();
+  // 지도 클릭/길게누르기 → 임시 핀 + "여기에 북마크 추가" 버튼 (버튼만 핀 위에)
+  function onMapClickAdd(lat, lng) {
     clearTempMarker();
     const el = document.createElement("div");
     el.className = "kk-add-wrap";
@@ -308,50 +364,11 @@
       `<button class="popup-add-btn" type="button">📍 여기에 북마크 추가</button>` +
       `<div class="cat-marker add-pin"><span class="add-plus">＋</span></div>`;
     el.querySelector(".popup-add-btn").addEventListener("click", () => startAddAt(lat, lng));
-    state.tempOverlay = new kakao.maps.CustomOverlay({
-      position: latLng, content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 6, clickable: true,
-    });
-    state.tempOverlay.setMap(state.map);
+    state.mainMap.showTempAdd(lat, lng, el);
   }
 
   function clearTempMarker() {
-    if (state.tempOverlay) { state.tempOverlay.setMap(null); state.tempOverlay = null; }
-  }
-
-  // 모바일: 지도를 길게 누르면 그 위치에 "추가" 핀 표시 (PC 우클릭과 동일 효과)
-  function setupLongPressAdd() {
-    const container = document.getElementById("map");
-    if (!container) return;
-    container.addEventListener("contextmenu", (e) => e.preventDefault());
-    let timer = null, start = null;
-    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
-    container.addEventListener("touchstart", (e) => {
-      if (!e.touches || e.touches.length !== 1) { cancel(); return; }
-      const t = e.touches[0];
-      start = { x: t.clientX, y: t.clientY };
-      cancel();
-      timer = setTimeout(() => {
-        timer = null;
-        if (!state.map) return;
-        try {
-          const rect = container.getBoundingClientRect();
-          const proj = state.map.getProjection();
-          const pt = new kakao.maps.Point(start.x - rect.left, start.y - rect.top);
-          const latLng = proj.coordsFromContainerPoint(pt);
-          state._suppressClick = true;
-          setTimeout(() => { state._suppressClick = false; }, 500);
-          onMapClickAdd(latLng);
-        } catch (e2) { /* 좌표 변환 실패 시 무시 */ }
-      }, 500);
-    }, { passive: true });
-    container.addEventListener("touchmove", (e) => {
-      if (timer && start && e.touches && e.touches[0]) {
-        const t = e.touches[0];
-        if (Math.abs(t.clientX - start.x) > 12 || Math.abs(t.clientY - start.y) > 12) cancel();
-      }
-    }, { passive: true });
-    container.addEventListener("touchend", cancel, { passive: true });
-    container.addEventListener("touchcancel", cancel, { passive: true });
+    if (state.mainMap) state.mainMap.clearTempAdd();
   }
 
   // 지정 좌표로 새 북마크 추가 시작
@@ -366,7 +383,7 @@
   // 검색 결과(이름·주소·좌표)로 바로 북마크 추가 시작
   function startAddAtPlace(name, addr, lat, lng) {
     clearTempMarker();
-    if (state.map) { state.map.setCenter(new kakao.maps.LatLng(lat, lng)); state.map.setLevel(3); }
+    if (state.mainMap) { state.mainMap.setCenter(lat, lng); state.mainMap.setLevel(3); }
     openEditor(null);
     state.draft.lat = lat;
     state.draft.lng = lng;
@@ -556,11 +573,11 @@
     if (!p || p.lat == null) { toast("위치 정보가 없어요"); return; }
     switchView("map");
     setTimeout(() => {
-      if (!state.map) return;
-      state.map.setLevel(3);
-      state.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng));
+      if (!state.mainMap) return;
+      state.mainMap.setLevel(3);
+      state.mainMap.setCenter(p.lat, p.lng);
       const mk = state.markers.get(id);
-      if (mk) openGroupPopup(mk.places, mk.pos);
+      if (mk) openGroupPopup(mk.places, mk.lat, mk.lng);
       focusListItem(id);
     }, 160);
   }
@@ -730,6 +747,13 @@
   }
 
   function initEditorMap() {
+    // 카카오 편집기 지도. 카카오가 아직 준비 안 됐으면(로딩 지연·폴백 등) 잠시 후 재시도.
+    if (!(window.kakao && kakao.maps && kakao.maps.Map)) {
+      state._editorMapRetry = (state._editorMapRetry || 0) + 1;
+      if (state._editorMapRetry <= 25) { setTimeout(initEditorMap, 200); }
+      return;
+    }
+    state._editorMapRetry = 0;
     const d = state.draft;
     const center = d.lat != null ? new kakao.maps.LatLng(d.lat, d.lng) : new kakao.maps.LatLng(37.5665, 126.978);
     const container = document.getElementById("editor-map");
@@ -1725,6 +1749,13 @@
     // 폴더 관리 모달 닫기
     $("#folder-manager-close").addEventListener("click", () => closeModal("folder-manager"));
 
+    // 지도 엔진 전환 버튼 (카카오 국내 ↔ Leaflet 전세계)
+    const engineToggle = $("#map-engine-toggle");
+    if (engineToggle) {
+      engineToggle.addEventListener("click", () =>
+        switchMapEngine(state.engine === "kakao" ? "leaflet" : "kakao"));
+    }
+
     // 지도 탭 장소 검색창
     const mapSearchInput = $("#map-search-input");
     if (mapSearchInput) {
@@ -1908,15 +1939,15 @@
     // 모바일은 레이아웃 확정이 늦어 초기 시트 높이 오측정 가능 → 재배치
     [200, 700].forEach((t) => setTimeout(() => state.listSheet && state.listSheet.enable(false), t));
 
-    // 카카오맵 로드 후 지도/마커 초기화 (autoload=false 사용)
-    if (window.kakao && kakao.maps && kakao.maps.load) {
-      kakao.maps.load(() => {
-        initMap();
-        refreshMarkers();
-        // 모바일: 레이아웃 확정이 늦어 지도가 빈칸으로 뜨는 것 방지 (여러 번 relayout)
-        [150, 500, 1200].forEach((t) => setTimeout(fixMapSize, t));
-      });
-    }
+    // 지난번 선택한 지도 엔진 복원 (기본: 카카오 국내)
+    try {
+      if (localStorage.getItem("pindiary.mapEngine") === "leaflet") state.engine = "leaflet";
+    } catch (_) {}
+    updateEngineToggle();
+
+    // 메인 지도 시작 (엔진에 맞춰 부트스트랩 — 카카오 실패 시 Leaflet 폴백).
+    // 카카오 SDK는 편집기 지도·국내 검색에도 쓰이므로 로드되면 계속 활용한다.
+    bootstrapMap();
     window.addEventListener("resize", fixMapSize);
     window.addEventListener("orientationchange", () => setTimeout(fixMapSize, 300));
 

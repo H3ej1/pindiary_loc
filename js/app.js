@@ -8,8 +8,8 @@
     mainMap: null, // 메인 지도 드라이버 (mapengine.js)
     engine: "kakao", // 현재 메인 지도 엔진: "kakao"(국내) | "leaflet"(전세계)
     markers: new Map(), // id -> { places, lat, lng }
-    editorMap: null,
-    editorMarker: null,
+    editorMap: null, // 편집기 미니지도 드라이버 (엔진은 메인과 동일)
+    editorEngine: null, // 편집기 지도가 현재 만들어진 엔진
     draft: null, // 편집 중인 레코드
     calCursor: null, // 달력 기준 월 (Date)
     selectedDay: null, // 'YYYY-MM-DD'
@@ -159,10 +159,10 @@
   // 실제 지도 조작은 state.mainMap 드라이버(mapengine.js)를 통해 이뤄진다.
   // ★ 엔진을 바꿔도 북마크 좌표(lat/lng)는 그대로 — 그래픽(엔진)만 바뀐다.
   // 엔진 전환 시 이전 지도 라이브러리(카카오/Leaflet)가 컨테이너에 남긴 잔재
-  // (_leaflet_id·leaflet 클래스·인라인 스타일 등)를 없애기 위해 #map을 깨끗한 새 노드로 교체.
+  // (_leaflet_id·leaflet 클래스·인라인 스타일 등)를 없애기 위해 컨테이너를 깨끗한 새 노드로 교체.
   // 잔재 위에 다른 지도 엔진을 초기화하면 렌더가 깨지므로 매번 새 컨테이너를 쓴다.
-  function getFreshMapContainer() {
-    const old = document.getElementById("map");
+  function freshContainer(id) {
+    const old = document.getElementById(id);
     const fresh = old.cloneNode(false); // 자식 없이 id/class만 복제 (_leaflet_id 같은 expando는 복제 안 됨)
     fresh.removeAttribute("style"); // 이전 엔진이 남긴 인라인 스타일 제거
     fresh.className = (old.className || "")
@@ -172,7 +172,7 @@
   }
 
   function buildMainMap(view) {
-    const container = getFreshMapContainer();
+    const container = freshContainer("map");
     state.mainMap = MapEngine.create(state.engine, container, {
       lat: view ? view.lat : 37.5665,
       lng: view ? view.lng : 126.978,
@@ -787,42 +787,45 @@
     setTimeout(initEditorMap, 60);
   }
 
+  // 편집기 미니지도. 메인 지도와 같은 엔진(국내=카카오 / 해외=Leaflet-OSM)을 따른다.
   function initEditorMap() {
-    // 카카오 편집기 지도. 카카오가 아직 준비 안 됐으면(로딩 지연·폴백 등) 잠시 후 재시도.
-    if (!(window.kakao && kakao.maps && kakao.maps.Map)) {
+    // 카카오 엔진인데 카카오가 아직 준비 안 됐으면(로딩 지연 등) 잠시 후 재시도.
+    if (state.engine === "kakao" && !(window.kakao && kakao.maps && kakao.maps.Map)) {
       state._editorMapRetry = (state._editorMapRetry || 0) + 1;
       if (state._editorMapRetry <= 25) { setTimeout(initEditorMap, 200); }
       return;
     }
     state._editorMapRetry = 0;
     const d = state.draft;
-    const center = d.lat != null ? new kakao.maps.LatLng(d.lat, d.lng) : new kakao.maps.LatLng(37.5665, 126.978);
-    const container = document.getElementById("editor-map");
-    if (!state.editorMap) {
-      state.editorMap = new kakao.maps.Map(container, { center, level: d.lat != null ? 3 : 7 });
-      state.editorMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-      kakao.maps.event.addListener(state.editorMap, "click", (me) => {
-        setEditorPin(me.latLng.getLat(), me.latLng.getLng(), true);
+    const lat = d.lat != null ? d.lat : 37.5665;
+    const lng = d.lat != null ? d.lng : 126.978;
+    const level = d.lat != null ? 3 : 7;
+
+    // 엔진이 바뀌었거나 아직 없으면 (새 컨테이너로) 다시 만든다.
+    if (!state.editorMap || state.editorEngine !== state.engine) {
+      if (state.editorMap) { try { state.editorMap.destroy(); } catch (_) {} state.editorMap = null; }
+      const container = freshContainer("editor-map");
+      state.editorMap = MapEngine.create(state.engine, container, {
+        lat, lng, level,
+        onBgClick: (clat, clng) => { if (clat != null) setEditorPin(clat, clng, true); },
       });
+      state.editorEngine = state.engine;
     } else {
-      state.editorMap.setCenter(center);
-      state.editorMap.setLevel(d.lat != null ? 3 : 7);
+      state.editorMap.setCenter(lat, lng);
+      state.editorMap.setLevel(level);
     }
-    setTimeout(() => state.editorMap.relayout(), 60);
+    [60, 250].forEach((t) => setTimeout(() => state.editorMap && state.editorMap.relayout(), t));
     if (d.lat != null) setEditorPin(d.lat, d.lng, false);
-    else if (state.editorMarker) {
-      state.editorMarker.setMap(null);
-      state.editorMarker = null;
-    }
+    else state.editorMap.clearPin();
   }
 
   function setEditorPin(lat, lng, reverse) {
     state.draft.lat = lat;
     state.draft.lng = lng;
-    const pos = new kakao.maps.LatLng(lat, lng);
-    if (state.editorMarker) state.editorMarker.setPosition(pos);
-    else state.editorMarker = new kakao.maps.Marker({ position: pos, map: state.editorMap });
-    state.editorMap.panTo(pos);
+    if (state.editorMap) {
+      state.editorMap.setPin(lat, lng);
+      state.editorMap.setCenter(lat, lng);
+    }
     if (reverse) reverseGeocode(lat, lng);
   }
 
@@ -843,7 +846,7 @@
         state.draft.name = $("#place-name").value;
         state.draft.address = it.addr;
         setEditorPin(it.lat, it.lng, false);
-        if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(it.lat, it.lng)); state.editorMap.setLevel(3); }
+        if (state.editorMap) { state.editorMap.setCenter(it.lat, it.lng); state.editorMap.setLevel(3); }
         results.innerHTML = "";
       });
       results.appendChild(li);
@@ -857,7 +860,7 @@
     if (coords) {
       results.innerHTML = "";
       setEditorPin(coords.lat, coords.lng, true);
-      if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(coords.lat, coords.lng)); state.editorMap.setLevel(3); }
+      if (state.editorMap) { state.editorMap.setCenter(coords.lat, coords.lng); state.editorMap.setLevel(3); }
       toast("링크에서 좌표를 찾았어요");
       return;
     }
@@ -1767,7 +1770,7 @@
       if (coords) {
         setTimeout(() => {
           setEditorPin(coords.lat, coords.lng, true);
-          if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(coords.lat, coords.lng)); state.editorMap.setLevel(3); }
+          if (state.editorMap) { state.editorMap.setCenter(coords.lat, coords.lng); state.editorMap.setLevel(3); }
           toast("링크에서 좌표를 찾았어요");
         }, 0);
       }

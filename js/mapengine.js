@@ -44,11 +44,12 @@
     });
     map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
-    let overlays = [], popup = null, temp = null, suppress = false;
+    let overlays = [], popup = null, temp = null, single = null, suppress = false;
 
-    kakao.maps.event.addListener(map, "click", () => {
+    kakao.maps.event.addListener(map, "click", (mouseEvent) => {
       if (suppress) return;
-      opts.onBgClick && opts.onBgClick();
+      const ll = mouseEvent && mouseEvent.latLng;
+      opts.onBgClick && opts.onBgClick(ll ? ll.getLat() : null, ll ? ll.getLng() : null);
     });
     kakao.maps.event.addListener(map, "rightclick", (me) =>
       opts.onAddRequest && opts.onAddRequest(me.latLng.getLat(), me.latLng.getLng()));
@@ -114,8 +115,15 @@
         temp.setMap(map);
       },
       clearTempAdd() { if (temp) { temp.setMap(null); temp = null; } },
+      // 편집기용 단일 핀(위치 지정 마커)
+      setPin(lat, lng) {
+        const pos = new kakao.maps.LatLng(lat, lng);
+        if (single) single.setPosition(pos);
+        else single = new kakao.maps.Marker({ position: pos, map });
+      },
+      clearPin() { if (single) { single.setMap(null); single = null; } },
       destroy() {
-        this.clearPins(); this.closePopup(); this.clearTempAdd();
+        this.clearPins(); this.closePopup(); this.clearTempAdd(); this.clearPin();
         container.innerHTML = "";
       },
     };
@@ -131,9 +139,9 @@
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
-    let pins = [], popup = null, temp = null;
+    let pins = [], popup = null, temp = null, single = null;
 
-    map.on("click", () => opts.onBgClick && opts.onBgClick());
+    map.on("click", (e) => opts.onBgClick && opts.onBgClick(e.latlng.lat, e.latlng.lng));
     map.on("contextmenu", (e) => {
       if (e.originalEvent) e.originalEvent.preventDefault();
       opts.onAddRequest && opts.onAddRequest(e.latlng.lat, e.latlng.lng);
@@ -200,8 +208,14 @@
         temp = overlayMarker(lat, lng, el, 1000);
       },
       clearTempAdd() { if (temp) { map.removeLayer(temp); temp = null; } },
+      // 편집기용 단일 핀(위치 지정 마커) — Leaflet 기본 마커 사용
+      setPin(lat, lng) {
+        if (single) single.setLatLng([lat, lng]);
+        else single = L.marker([lat, lng]).addTo(map);
+      },
+      clearPin() { if (single) { map.removeLayer(single); single = null; } },
       destroy() {
-        this.clearPins(); this.closePopup(); this.clearTempAdd();
+        this.clearPins(); this.closePopup(); this.clearTempAdd(); this.clearPin();
         map.remove();
         container.innerHTML = "";
       },

@@ -393,31 +393,34 @@
     $("#place-address").value = addr;
   }
 
-  // ---------- 해외 검색·주소 (Photon, 무료·키 불필요) ----------
-  // 전세계(Leaflet) 모드에서 카카오(국내 전용) 대신 사용한다.
-  async function photonSearch(query) {
-    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12`);
-    if (!res.ok) throw new Error("photon " + res.status);
+  // ---------- 해외 검색·주소 (Nominatim/OSM, 무료·키 불필요) ----------
+  // 전세계(Leaflet) 모드에서 카카오(국내 전용) 대신 사용. accept-language=ko로 한국어 우선
+  // → 한국어로 검색 가능하고, 결과 이름/주소도 한국어 데이터가 있는 곳은 한글로 나온다(영어도 그대로 됨).
+  async function worldSearch(query) {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}` +
+      `&format=jsonv2&addressdetails=1&namedetails=1&limit=12&accept-language=ko`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("nominatim " + res.status);
     const data = await res.json();
-    return (data.features || []).map((f) => {
-      const c = (f.geometry && f.geometry.coordinates) || null; // [lng, lat]
-      const p = f.properties || {};
-      const street = [p.street, p.housenumber].filter(Boolean).join(" ");
-      const name = p.name || street || p.city || p.county || "이름 미상";
-      const addr = [street, p.district, p.city, p.state, p.country]
-        .filter(Boolean).filter((x) => x !== name).join(", ");
-      return { name, addr, lat: c ? c[1] : null, lng: c ? c[0] : null };
-    }).filter((r) => r.lat != null);
+    return (data || []).map((r) => {
+      const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+      const full = r.display_name || "";
+      // 한국어 이름(name:ko)이 있으면 우선 사용 → 영어로 검색해도 이름이 한글로 나온다.
+      const nd = r.namedetails || {};
+      const name = nd["name:ko"] || r.name || full.split(",")[0] || "이름 미상";
+      const addr = full === name ? "" : full;
+      return { name, addr, lat, lng };
+    }).filter((r) => !isNaN(r.lat) && !isNaN(r.lng));
   }
 
-  async function photonReverse(lat, lng) {
+  async function worldReverse(lat, lng) {
     try {
-      const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}` +
+        `&format=jsonv2&accept-language=ko`;
+      const res = await fetch(url);
       if (!res.ok) return "";
       const data = await res.json();
-      const p = (data.features && data.features[0] && data.features[0].properties) || {};
-      const street = [p.street, p.housenumber].filter(Boolean).join(" ");
-      return [street, p.district, p.city, p.state, p.country].filter(Boolean).join(", ");
+      return data.display_name || "";
     } catch (_) { return ""; }
   }
 
@@ -444,7 +447,7 @@
     if (!box) return;
     box.innerHTML = "<li>검색 중…</li>";
     if (state.engine === "leaflet") {
-      photonSearch(query)
+      worldSearch(query)
         .then((items) => fillMapResults(box, items))
         .catch(() => { box.innerHTML = "<li>검색 실패 (네트워크 확인).</li>"; });
       return;
@@ -867,7 +870,7 @@
     results.innerHTML = `<li>검색 중…</li>`;
     // 전세계(Leaflet) 모드 = Photon(해외 검색), 국내(카카오) 모드 = 카카오 Places
     if (state.engine === "leaflet") {
-      photonSearch(query)
+      worldSearch(query)
         .then((items) => fillEditorResults(results, items))
         .catch(() => { results.innerHTML = `<li>검색 실패 (인터넷 확인). 지도를 직접 눌러도 됩니다.</li>`; });
       return;
@@ -896,7 +899,7 @@
   function reverseGeocode(lat, lng) {
     // 전세계(Leaflet) 모드는 Photon 역지오코딩으로 주소 자동입력
     if (state.engine === "leaflet") {
-      photonReverse(lat, lng).then((addr) => {
+      worldReverse(lat, lng).then((addr) => {
         if (addr && !$("#place-address").value) {
           $("#place-address").value = addr;
           if (state.draft) state.draft.address = addr;

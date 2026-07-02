@@ -122,13 +122,13 @@
   }
 
   // ================= Leaflet 드라이버 (전세계) =================
-  // 바탕 타일: CARTO Voyager (전세계·무료·키 불필요). 부드러운 파스텔로 색 핀이 잘 보인다.
+  // 바탕 타일: OSM 표준 (전세계·무료·키 불필요). 가게·식당·카페 등 장소 이름(POI)이 촘촘히 표시된다.
   function createLeafletDriver(container, opts) {
     const map = L.map(container, { zoomControl: true, attributionControl: true })
       .setView([opts.lat, opts.lng], levelToZoom(opts.level || 4));
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd", maxZoom: 20,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      subdomains: "abc", maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
     let pins = [], popup = null, temp = null;

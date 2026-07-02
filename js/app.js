@@ -393,37 +393,78 @@
     $("#place-address").value = addr;
   }
 
+  // ---------- 해외 검색·주소 (Photon, 무료·키 불필요) ----------
+  // 전세계(Leaflet) 모드에서 카카오(국내 전용) 대신 사용한다.
+  async function photonSearch(query) {
+    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12`);
+    if (!res.ok) throw new Error("photon " + res.status);
+    const data = await res.json();
+    return (data.features || []).map((f) => {
+      const c = (f.geometry && f.geometry.coordinates) || null; // [lng, lat]
+      const p = f.properties || {};
+      const street = [p.street, p.housenumber].filter(Boolean).join(" ");
+      const name = p.name || street || p.city || p.county || "이름 미상";
+      const addr = [street, p.district, p.city, p.state, p.country]
+        .filter(Boolean).filter((x) => x !== name).join(", ");
+      return { name, addr, lat: c ? c[1] : null, lng: c ? c[0] : null };
+    }).filter((r) => r.lat != null);
+  }
+
+  async function photonReverse(lat, lng) {
+    try {
+      const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
+      if (!res.ok) return "";
+      const data = await res.json();
+      const p = (data.features && data.features[0] && data.features[0].properties) || {};
+      const street = [p.street, p.housenumber].filter(Boolean).join(" ");
+      return [street, p.district, p.city, p.state, p.country].filter(Boolean).join(", ");
+    } catch (_) { return ""; }
+  }
+
+  // 지도 탭 검색결과 렌더 (엔진 무관 공통 형태 {name,addr,lat,lng})
+  function fillMapResults(box, items) {
+    if (!items.length) { box.innerHTML = "<li>검색 결과가 없어요.</li>"; return; }
+    box.innerHTML = "";
+    items.slice(0, 12).forEach((it) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="r-name">${escapeHtml(it.name)}</div><div class="r-addr">${escapeHtml(it.addr)}</div>`;
+      li.addEventListener("click", () => {
+        box.innerHTML = "";
+        $("#map-search-input").value = "";
+        startAddAtPlace(it.name, it.addr, it.lat, it.lng);
+      });
+      box.appendChild(li);
+    });
+  }
+
   // 지도 탭 검색창: 장소 검색 → 결과 클릭 시 바로 추가
+  // 전세계(Leaflet) 모드 = Photon(해외), 국내(카카오) 모드 = 카카오 Places
   function mapSearch(query) {
     const box = $("#map-search-results");
     if (!box) return;
-    if (!(window.kakao && kakao.maps && kakao.maps.services)) { box.innerHTML = "<li>검색 모듈 로드 실패</li>"; return; }
     box.innerHTML = "<li>검색 중…</li>";
+    if (state.engine === "leaflet") {
+      photonSearch(query)
+        .then((items) => fillMapResults(box, items))
+        .catch(() => { box.innerHTML = "<li>검색 실패 (네트워크 확인).</li>"; });
+      return;
+    }
+    if (!(window.kakao && kakao.maps && kakao.maps.services)) { box.innerHTML = "<li>검색 모듈 로드 실패</li>"; return; }
     const ps = new kakao.maps.services.Places();
-    const opts = {};
     // 위치/반경 제한 없이 전국 검색 (먼 장소도 찾도록)
     ps.keywordSearch(query, (data, status) => {
       if (status === kakao.maps.services.Status.OK && data.length) {
-        box.innerHTML = "";
-        data.slice(0, 12).forEach((place) => {
-          const lat = parseFloat(place.y), lng = parseFloat(place.x);
-          const name = place.place_name || "이름 미상";
-          const addr = place.road_address_name || place.address_name || "";
-          const li = document.createElement("li");
-          li.innerHTML = `<div class="r-name">${escapeHtml(name)}</div><div class="r-addr">${escapeHtml(addr)}</div>`;
-          li.addEventListener("click", () => {
-            box.innerHTML = "";
-            $("#map-search-input").value = "";
-            startAddAtPlace(name, addr, lat, lng);
-          });
-          box.appendChild(li);
-        });
+        fillMapResults(box, data.map((place) => ({
+          name: place.place_name || "이름 미상",
+          addr: place.road_address_name || place.address_name || "",
+          lat: parseFloat(place.y), lng: parseFloat(place.x),
+        })));
       } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
         box.innerHTML = "<li>검색 결과가 없어요.</li>";
       } else {
         box.innerHTML = "<li>" + searchFailMsg() + "</li>";
       }
-    }, opts);
+    }, {});
   }
 
   // ---------- 목록 ----------
@@ -785,7 +826,30 @@
     if (reverse) reverseGeocode(lat, lng);
   }
 
-  // ---------- 지오코딩 (Nominatim, 무료) ----------
+  // ---------- 편집기 장소 검색 (국내=카카오 / 전세계=Photon) ----------
+  // 편집기 검색결과 렌더 (엔진 무관 공통 형태 {name,addr,lat,lng})
+  function fillEditorResults(results, items) {
+    if (!items.length) {
+      results.innerHTML = `<li>검색 결과가 없어요. 지도를 직접 눌러 위치를 찍어보세요.</li>`;
+      return;
+    }
+    results.innerHTML = "";
+    items.slice(0, 12).forEach((it) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="r-name">${escapeHtml(it.name)}</div><div class="r-addr">${escapeHtml(it.addr)}</div>`;
+      li.addEventListener("click", () => {
+        if (!$("#place-name").value) $("#place-name").value = it.name;
+        $("#place-address").value = it.addr;
+        state.draft.name = $("#place-name").value;
+        state.draft.address = it.addr;
+        setEditorPin(it.lat, it.lng, false);
+        if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(it.lat, it.lng)); state.editorMap.setLevel(3); }
+        results.innerHTML = "";
+      });
+      results.appendChild(li);
+    });
+  }
+
   function searchPlace(query) {
     const results = $("#search-results");
     // 먼저 링크 붙여넣기 좌표 추출 시도
@@ -797,43 +861,46 @@
       toast("링크에서 좌표를 찾았어요");
       return;
     }
+    results.innerHTML = `<li>검색 중…</li>`;
+    // 전세계(Leaflet) 모드 = Photon(해외 검색), 국내(카카오) 모드 = 카카오 Places
+    if (state.engine === "leaflet") {
+      photonSearch(query)
+        .then((items) => fillEditorResults(results, items))
+        .catch(() => { results.innerHTML = `<li>검색 실패 (인터넷 확인). 지도를 직접 눌러도 됩니다.</li>`; });
+      return;
+    }
     if (!(window.kakao && kakao.maps && kakao.maps.services)) {
       results.innerHTML = `<li>검색 모듈 로드 실패 (인터넷 확인)</li>`;
       return;
     }
-    results.innerHTML = `<li>검색 중…</li>`;
     const ps = new kakao.maps.services.Places();
-    const opts = {};
     // 위치/반경 제한 없이 전국 검색 (카카오 키워드 검색, 띄어쓰기 차이도 잘 처리)
     ps.keywordSearch(query, (data, status) => {
       if (status === kakao.maps.services.Status.OK) {
-        results.innerHTML = "";
-        data.slice(0, 12).forEach((place) => {
-          const lat = parseFloat(place.y), lng = parseFloat(place.x);
-          const name = place.place_name || "이름 미상";
-          const addr = place.road_address_name || place.address_name || "";
-          const li = document.createElement("li");
-          li.innerHTML = `<div class="r-name">${escapeHtml(name)}</div><div class="r-addr">${escapeHtml(addr)}</div>`;
-          li.addEventListener("click", () => {
-            if (!$("#place-name").value) $("#place-name").value = name;
-            $("#place-address").value = addr;
-            state.draft.name = $("#place-name").value;
-            state.draft.address = addr;
-            setEditorPin(lat, lng, false);
-            if (state.editorMap) { state.editorMap.setCenter(new kakao.maps.LatLng(lat, lng)); state.editorMap.setLevel(3); }
-            results.innerHTML = "";
-          });
-          results.appendChild(li);
-        });
+        fillEditorResults(results, (data || []).map((place) => ({
+          name: place.place_name || "이름 미상",
+          addr: place.road_address_name || place.address_name || "",
+          lat: parseFloat(place.y), lng: parseFloat(place.x),
+        })));
       } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
         results.innerHTML = `<li>검색 결과가 없어요. 지도를 직접 눌러 위치를 찍어보세요.</li>`;
       } else {
         results.innerHTML = `<li>${searchFailMsg()} 지도를 직접 눌러도 됩니다.</li>`;
       }
-    }, opts);
+    }, {});
   }
 
   function reverseGeocode(lat, lng) {
+    // 전세계(Leaflet) 모드는 Photon 역지오코딩으로 주소 자동입력
+    if (state.engine === "leaflet") {
+      photonReverse(lat, lng).then((addr) => {
+        if (addr && !$("#place-address").value) {
+          $("#place-address").value = addr;
+          if (state.draft) state.draft.address = addr;
+        }
+      });
+      return;
+    }
     if (!(window.kakao && kakao.maps && kakao.maps.services)) return;
     const geocoder = new kakao.maps.services.Geocoder();
     geocoder.coord2Address(lng, lat, (result, status) => {
